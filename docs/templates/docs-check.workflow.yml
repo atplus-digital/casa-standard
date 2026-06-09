@@ -1,3 +1,5 @@
+# Gate de CI do CASA Standard (§3/§8) — instalado pelo casa-init em
+# .github/workflows/docs-check.yml quando o repo tem remote.
 name: docs-check
 
 on:
@@ -15,5 +17,3 @@ jobs:
           python-version: "3.12"
       - name: Validar docs (CASA Standard §8)
         run: python3 scripts/docs-check
-      - name: Testar bootstrap casa-init (SPEC-0001)
-        run: scripts/test-casa-init

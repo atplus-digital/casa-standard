@@ -19,7 +19,8 @@ Não há aplicação para rodar — o "produto" é a doc + o script.
 ## Como validar (DoD global do repo)
 
 ```bash
-python3 scripts/docs-check          # exit 0; é o mesmo comando que o CI roda
+python3 scripts/docs-check          # exit 0; mesmo comando do CI
+scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
 ```
 
 ## Git & PRs
@@ -51,4 +52,5 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
 - Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
 - Pendências e reservas de NNNN: `docs/BACKLOG.md` (reserve lá antes de criar ADR/Spec novo)
+- Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`

@@ -2,9 +2,11 @@
 
 ```yaml
 casa-repo-id: <nome-canonico-do-repo>   # usado em referências cross-repo (repo:ADR-0001)
-casa-tier: T1                            # T0 (leve) | T1 (padrão) — ver STANDARD.md §3
+casa-tier: T1                            # T0 (leve) | T1 (padrão) — STANDARD §3
+casa-standard-ref: <sha>                 # versão do casa-standard de origem — o casa-init carimba
 ```
 
+> Padrão: https://github.com/atplus-digital/casa-standard (STANDARD.md)
 > ROUTER (CASA §4): carga sempre, teto ~150 linhas. Só alto-ROI transversal.
 > Estourou o teto → conteúdo desce para docs/context/, fica o ponteiro.
 > ⚠️ NÃO usar @import para colar capítulos: @import expande tudo no launch.

@@ -28,5 +28,36 @@
     "builds-on": [],
     "superseded-by": null,
     "implemented-by": []
+  },
+  {
+    "id": "ADR-0004",
+    "path": "docs/adr/0004-bootstrap-casa-init.md",
+    "layer": "adr",
+    "title": "Bootstrap e atualização de repo adotante é script idempotente no casa-standard",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0001"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
+    "id": "SPEC-0001",
+    "path": "docs/specs/0001-casa-init.md",
+    "layer": "specs",
+    "title": "casa-init instala e atualiza a infraestrutura CASA em qualquer estado de repo",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0004",
+      "ADR-0001"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/casa-init",
+      "scripts/test-casa-init",
+      "docs/templates/docs-check.workflow.yml",
+      "docs/templates/AGENTS.template.md",
+      ".github/workflows/docs-check.yml"
+    ]
   }
 ]

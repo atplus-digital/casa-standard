@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+casa-init — instala e atualiza a infraestrutura do CASA Standard num repo
+adotante, em qualquer estado: vazio, novo, legado, com docs ADR/SDD.
+Decisão: ADR-0004 · comportamento: SPEC-0001.
+
+Uso:
+  scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
+
+Aditivo e idempotente:
+  - Toolchain (da ferramenta; sobrescreve quando difere): scripts/docs-check,
+    scripts/pre-commit e docs/templates/*.
+  - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
+    se ausente — com repo-id, tier e casa-standard-ref carimbados; se existir,
+    apenas a linha casa-standard-ref é atualizada (quando presente).
+  - Gate (ADR-0001): com remote → workflow de CI (criado se ausente); sem
+    remote → pre-commit hook (hook alheio não é tocado); sem .git → orienta.
+  - Diagnóstico: roda o docs-check do destino ao final e relata. Migração de
+    conteúdo legado é trabalho humano (STANDARD §10), não deste script.
+
+NUNCA toca: docs/adr|specs|context, README, LICENSE, código do repo.
+Exit 0 = instalação concluída (pendência de migração é relatório, não falha).
+"""
+import argparse, filecmp, os, re, shutil, subprocess, sys
+from pathlib import Path
+
+SRC = Path(__file__).resolve().parent.parent
+TOOLCHAIN = [
+    "scripts/docs-check",
+    "scripts/pre-commit",
+    "docs/templates/AGENTS.template.md",
+    "docs/templates/adr.template.md",
+    "docs/templates/spec.template.md",
+    "docs/templates/docs-check.workflow.yml",
+]
+WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
+WORKFLOW_DEST = ".github/workflows/docs-check.yml"
+
+
+def sh(args, cwd=None):
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+
+
+def src_ref():
+    r = sh(["git", "-C", str(SRC), "rev-parse", "--short", "HEAD"])
+    return r.stdout.strip() if r.returncode == 0 else "unknown"
+
+
+def say(tag, msg):
+    print(f"{tag:>11}  {msg}")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="instala/atualiza a infraestrutura CASA num repo (SPEC-0001)")
+    ap.add_argument("destino")
+    ap.add_argument("--repo-id", default=None)
+    ap.add_argument("--tier", choices=["T0", "T1"], default="T1")
+    args = ap.parse_args()
+
+    target = Path(args.destino).expanduser().resolve()
+    if target == SRC:
+        sys.exit("casa-init: o destino é o próprio casa-standard — nada a fazer.")
+    if target.exists() and not target.is_dir():
+        sys.exit(f"casa-init: destino não é diretório: {target}")
+    target.mkdir(parents=True, exist_ok=True)
+    repo_id = args.repo_id or target.name
+    ref = src_ref()
+
+    # 1. Toolchain — propriedade da ferramenta
+    for rel in TOOLCHAIN:
+        s, d = SRC / rel, target / rel
+        d.parent.mkdir(parents=True, exist_ok=True)
+        if not d.exists():
+            shutil.copy2(s, d)
+            say("criado", rel)
+        elif not filecmp.cmp(s, d, shallow=False):
+            shutil.copy2(s, d)
+            say("atualizado", rel)
+        else:
+            say("em dia", rel)
+    for rel in ("scripts/docs-check", "scripts/pre-commit"):
+        (target / rel).chmod(0o755)
+
+    # 2. Identidade — propriedade do repo (só a linha casa-standard-ref é da ferramenta)
+    router = target / "AGENTS.md"
+    if not router.exists():
+        text = (SRC / "docs/templates/AGENTS.template.md").read_text(encoding="utf-8")
+        text = text.replace("<nome-canonico-do-repo>", repo_id)
+        if args.tier == "T0":
+            text = text.replace("casa-tier: T1", "casa-tier: T0", 1)
+        text = text.replace("casa-standard-ref: <sha>", f"casa-standard-ref: {ref}", 1)
+        router.write_text(text, encoding="utf-8")
+        say("criado", f"AGENTS.md (router; repo-id={repo_id}, tier={args.tier} — preencha as seções)")
+    else:
+        old = router.read_text(encoding="utf-8")
+        new = re.sub(r"^(casa-standard-ref:)\s*\S+", rf"\g<1> {ref}", old, count=1, flags=re.M)
+        if new != old:
+            router.write_text(new, encoding="utf-8")
+            say("atualizado", f"AGENTS.md: casa-standard-ref → {ref}")
+        else:
+            say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
+
+    # 3. Gate (ADR-0001)
+    r = sh(["git", "-C", str(target), "rev-parse", "--git-dir"])
+    if r.returncode != 0:
+        say("AVISO", "sem .git: gate não instalado — rode `git init` e casa-init de novo (STANDARD §3)")
+    else:
+        gd = Path(r.stdout.strip())
+        gitdir = gd if gd.is_absolute() else (target / gd)
+        if sh(["git", "-C", str(target), "remote"]).stdout.strip():
+            wf = target / WORKFLOW_DEST
+            if wf.exists():
+                say("preservado", f"{WORKFLOW_DEST} (workflow é do repo)")
+            else:
+                wf.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(SRC / WORKFLOW_TEMPLATE, wf)
+                say("criado", f"{WORKFLOW_DEST} (gate: CI)")
+        else:
+            hook = gitdir / "hooks" / "pre-commit"
+            ours = target / "scripts" / "pre-commit"
+            if hook.exists() or hook.is_symlink():
+                try:
+                    same = hook.resolve() == ours.resolve() or hook.read_bytes() == ours.read_bytes()
+                except OSError:
+                    same = False
+                if same:
+                    say("em dia", ".git/hooks/pre-commit (gate: local)")
+                else:
+                    say("AVISO", f"{hook} existe e não é o do CASA — não toco; "
+                                 "integre `scripts/docs-check` a ele")
+            else:
+                hook.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    hook.symlink_to(os.path.relpath(ours, hook.parent))
+                except OSError:
+                    shutil.copy2(ours, hook)
+                    hook.chmod(0o755)
+                say("criado", ".git/hooks/pre-commit → scripts/pre-commit (gate: local, ADR-0001)")
+
+    # 4. Diagnóstico — migração de conteúdo é humana (§10)
+    print()
+    r = sh([sys.executable, str(target / "scripts" / "docs-check")], cwd=target)
+    print(r.stdout.strip() or "(docs-check sem saída)")
+    if r.returncode != 0:
+        print("→ docs existentes precisam de migração de conteúdo (STANDARD §10) — o gate vai cobrar.")
+    else:
+        print(f"→ repo verde no CASA (origem: casa-standard@{ref}).")
+
+
+if __name__ == "__main__":
+    main()
