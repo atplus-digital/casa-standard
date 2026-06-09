@@ -49,5 +49,6 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 ## Mapa de docs
 
 - Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
-- Decisões: `docs/adr/` · Comportamento: `docs/specs/` (vazios por ora; READMEs GERADOS — não editar)
+- Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
+- Pendências e reservas de NNNN: `docs/BACKLOG.md` (reserve lá antes de criar ADR/Spec novo)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`
