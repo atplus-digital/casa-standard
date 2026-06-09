@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0001 (casa-init). DoD: exit 0 = todos verdes.
+# Roda local e no CI; sem dependências além de git, python3 e coreutils.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INIT="$ROOT/scripts/casa-init"
+pass=0; fail=0
+ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+tree_hash() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cat | cksum); }
+
+# EARS 1, 11, 10 — greenfield (cria destino), repo-id explícito, idempotência
+A="$(mktemp -d)/novo"
+python3 "$INIT" "$A" --repo-id meu-app >/dev/null
+ck "EARS-1/11: router criado com repo-id"            'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
+ck "ref carimbado (placeholder substituído)"         'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
+ck "docs-check verde no destino recém-criado"        '(cd "$A" && python3 scripts/docs-check)'
+H1=$(tree_hash "$A"); python3 "$INIT" "$A" --repo-id meu-app >/dev/null; H2=$(tree_hash "$A")
+ck "EARS-10: segunda execução não muda nenhum byte"  '[ "$H1" = "$H2" ]'
+
+# EARS 3 — router existente é do repo
+B="$(mktemp -d)/r"; mkdir -p "$B"; printf 'meu router\n' > "$B/AGENTS.md"
+python3 "$INIT" "$B" >/dev/null
+ck "EARS-3: AGENTS.md existente preservado"          '[ "$(cat "$B/AGENTS.md")" = "meu router" ]'
+
+# EARS 4 — toolchain desatualizada é da ferramenta
+C="$(mktemp -d)/u"; python3 "$INIT" "$C" >/dev/null
+printf '# versao velha\n' > "$C/scripts/docs-check"
+OUT=$(python3 "$INIT" "$C" 2>&1)
+ck "EARS-4: toolchain divergente é sobrescrita"      'cmp -s "$ROOT/scripts/docs-check" "$C/scripts/docs-check"'
+ck "EARS-4: e relatada como atualizada"              'echo "$OUT" | grep -q "atualizado.*scripts/docs-check"'
+
+# EARS 6 — git sem remote → hook
+D="$(mktemp -d)/g"; mkdir -p "$D"; git init -q "$D"
+python3 "$INIT" "$D" >/dev/null
+ck "EARS-6: pre-commit hook instalado sem remote"    '[ -e "$D/.git/hooks/pre-commit" ]'
+
+# EARS 7 — git com remote → workflow, sem hook
+E="$(mktemp -d)/h"; mkdir -p "$E"; git init -q "$E"; git -C "$E" remote add origin https://example.invalid/x.git
+python3 "$INIT" "$E" >/dev/null
+ck "EARS-7: workflow de CI criado com remote"        '[ -f "$E/.github/workflows/docs-check.yml" ]'
+ck "EARS-7: hook não instalado com remote"           '[ ! -e "$E/.git/hooks/pre-commit" ]'
+
+# EARS 8 — hook alheio não é tocado
+F="$(mktemp -d)/f"; mkdir -p "$F"; git init -q "$F"
+printf '#!/bin/sh\necho alheio\n' > "$F/.git/hooks/pre-commit"; chmod +x "$F/.git/hooks/pre-commit"
+OUT=$(python3 "$INIT" "$F" 2>&1)
+ck "EARS-8: hook alheio preservado"                  'grep -q "echo alheio" "$F/.git/hooks/pre-commit"'
+ck "EARS-8: hook alheio gera AVISO"                  'echo "$OUT" | grep -q "AVISO.*não é o do CASA"'
+
+# EARS 5, 9 — legado sem .git e com docs inválidos: instala, relata, exit 0
+G="$(mktemp -d)/l"; mkdir -p "$G/docs/adr"; printf '# doc legado sem frontmatter\n' > "$G/docs/adr/0001-legado.md"
+OUT=$(python3 "$INIT" "$G" 2>&1); RC=$?
+ck "EARS-9: exit 0 mesmo com docs legados inválidos" '[ "$RC" -eq 0 ]'
+ck "EARS-9: migração pendente relatada"              'echo "$OUT" | grep -q "migração"'
+ck "EARS-5: sem .git orienta e não instala gate"     'echo "$OUT" | grep -q "sem .git"'
+
+# EARS 2 — destino = casa-standard
+ck "EARS-2: auto-destino abortado com exit != 0"     '! python3 "$INIT" "$ROOT"'
+
+echo
+echo "==== $pass PASS / $fail FAIL ===="
+[ "$fail" -eq 0 ]

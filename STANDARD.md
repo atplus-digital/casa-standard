@@ -177,11 +177,13 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 
 ---
 
-## 10. Adoção em repos existentes
+## 10. Adoção — projeto novo ou repo existente
 
-Incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) `AGENTS.md` router na espinha padrão (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente; sem CI disponível, instale o hook (`ln -sf ../../scripts/pre-commit .git/hooks/pre-commit`).
+**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente) e o gate do §3 em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (carimbo `casa-standard-ref` no router diz de qual versão o repo veio). Projeto **novo** termina aqui: nasce verde.
 
-O padrão vive num repo simples (`casa-standard`) com este documento, templates e o `docs-check` de referência. Mudança é PR com conversa.
+Repo **existente**: o `casa-init` instala a base e o `docs-check` relata o que falta; a migração de **conteúdo** exige julgamento e segue incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) preencher o `AGENTS.md` router (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente (o gate em si — CI ou hook — o `casa-init` já instalou).
+
+O padrão vive num repo simples (`casa-standard`) com este documento, os templates, o `docs-check` e o `casa-init` de referência. Mudança é PR com conversa.
 
 ---
 
@@ -204,3 +206,5 @@ O padrão vive num repo simples (`casa-standard`) com este documento, templates 
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
 - `scripts/pre-commit` — gate local de referência para repo sem remote (§3)
+- `scripts/casa-init` — instala/atualiza a infraestrutura CASA num repo adotante (§10; testado por `scripts/test-casa-init` no CI)
+- `docs/templates/docs-check.workflow.yml` — workflow de CI distribuído pelo `casa-init`

@@ -21,7 +21,16 @@ Critério de design: **complexidade sustentada por automação é barata; comple
 
 ## Começando
 
-Para adotar num repo existente, siga a ordem incremental do [STANDARD.md §10](STANDARD.md). Para validar um repo localmente:
+Projeto novo ou repo existente — o bootstrap é o mesmo ([STANDARD.md §10](STANDARD.md)):
+
+```bash
+git clone https://github.com/atplus-digital/casa-standard
+casa-standard/scripts/casa-init <caminho-do-seu-repo> --repo-id <nome>
+```
+
+O `casa-init` instala o validador, os templates, o router (se ausente) e o gate (CI com remote; pre-commit hook sem) — aditivo e idempotente: nunca toca o conteúdo do repo, e rodar de novo atualiza a toolchain. Num repo com docs legados, ele relata o que falta migrar; a migração em si segue o §10.
+
+Para validar um repo localmente:
 
 ```bash
 python3 scripts/docs-check               # valida; exit 1 se houver erro
