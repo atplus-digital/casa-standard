@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão:** 1.0 (enxuta, rev. 5) · **Status:** proposed · **Mantenedor:** (definir owner)
+**Versão:** 1.0 (enxuta, rev. 6) · **Status:** proposed · **Mantenedor:** (definir owner)
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -28,8 +28,10 @@ docs/
   adr/                     # DECISÕES — se houver decisão estrutural
   specs/                   # COMPORTAMENTO — se houver feature com contrato
   templates/               # cópias dos templates oficiais
+  BACKLOG.md               # pendências + reservas de NNNN — se houver (§5)
 scripts/
   docs-check               # valida frontmatter, grafo e higiene (§8)
+  pre-commit               # gate local quando não há remote (§3)
 <subdir>/AGENTS.md         # opcional: regras que só valem naquele pacote (§4)
 ```
 
@@ -42,7 +44,7 @@ scripts/
 Cada repo declara seu nível no `AGENTS.md`:
 
 - **T0 — leve** (script, POC, ferramenta descartável): só `AGENTS.md` + DoD mínimo (build/teste verde).
-- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` no CI.
+- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` em **gate automatizado** — CI quando há remote; pre-commit hook quando não há (referência: `scripts/pre-commit`). Gate documental ("está no DoD do router") não conta: é disciplina, não automação.
 
 Dentro de T1, o que escrever é decidido por **gatilho**:
 
@@ -80,7 +82,7 @@ Duas regras que sustentam o modelo:
 ADR (decisão, o porquê)  →  Spec (comportamento, o quê)  →  código + CI (a entrega)
 ```
 
-Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/NNNN-titulo-kebab.md`; numeração **local por repo e por camada**. Reserve o próximo `NNNN` no PR que cria o doc: o `docs-check` rejeita id duplicado, mas só pós-merge, então alocar sem colisão é responsabilidade de quem abre o PR (renumerar depois cascateia nos `builds-on`). Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
+Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/NNNN-titulo-kebab.md`; numeração **local por repo e por camada**. Reserve o próximo `NNNN` no PR que cria o doc e registre a reserva em `docs/BACKLOG.md` — é o ledger que evita dois PRs paralelos alocando o mesmo número (o `docs-check` rejeita id duplicado, mas só pós-merge; renumerar depois cascateia nos `builds-on`). Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
 
 ### 5.1 ADR — a decisão
 
@@ -96,7 +98,7 @@ Regras de imutabilidade, agora sem a pressão que as quebrava:
 > ⚠️ VERDADE ATUAL: <o que ainda vale; o que foi revogado; ADR fonte atual>
 ```
 
-O `docs-check` exige o bloco **real** (fora de comentário HTML — o exemplo do template não conta) em todo ADR `superseded`, e que `superseded-by` (escalar, sem auto-referência) resolva para outro ADR. Não se inventa em ADR: decisão de negócio não tomada vira item no issue tracker, não ADR.
+O `docs-check` exige o bloco **real** (fora de comentário HTML — o exemplo do template não conta) em todo ADR `superseded`, e que `superseded-by` (escalar, sem auto-referência) resolva para outro ADR. Não se inventa em ADR: decisão de negócio não tomada vira item no issue tracker — ou, em repo sem tracker, em `docs/BACKLOG.md` (fora de `docs/context/`: backlog é pendência, não estado imperativo). Nunca vira ADR.
 
 ### 5.2 Spec — o comportamento e a entrega
 
@@ -126,6 +128,8 @@ implemented-by: []           # Specs: paths reais, preenchido no fechamento
 
 O frontmatter aceita só o subconjunto YAML do exemplo — escalar, lista inline e lista em bloco (`- item`). O `docs-check` **rejeita com erro** qualquer outra sintaxe em vez de ignorá-la em silêncio.
 
+O vocabulário de campos é **fechado**: `status`, `date`, `builds-on`, `superseded-by`, `implemented-by`, `deciders`. Campo fora dele sai como **aviso** — extensão é permitida, mas deliberada: registre o campo novo num ADR do repo ou remova-o. Campo fantasma (presente no arquivo, ausente do grafo) não fica.
+
 Os `README.md` das pastas de docs (tabela id/título/status) são **gerados** pelo `docs-check` — nunca editados à mão.
 
 ---
@@ -143,15 +147,15 @@ deno check supabase/functions/dns/
 ​```
 ```
 
-Cada linha é executável no ambiente descrito no router; sucesso é exit code ou asserção no comentário. O que exige olho humano vai para `## Revisão humana`, separado — o agente sabe o que está e o que não está no loop dele.
+Cada linha é executável no ambiente descrito no router; sucesso é exit code ou asserção no comentário. Linha parametrizada (ex.: `deno check functions/<fn>/`) declara como enumerar o parâmetro ("para cada Edge alterada") ou vem em forma de loop — placeholder sem regra de enumeração não é executável. O que exige olho humano vai para `## Revisão humana`, separado — o agente sabe o que está e o que não está no loop dele.
 
 ---
 
 ## 8. docs-check — o que o CI valida
 
-`scripts/docs-check` roda no CI de todo repo T1. **Erro = exit 1 por padrão**; `--warn-only` imprime tudo e sai 0, e existe só para a janela de adoção (§10).
+`scripts/docs-check` roda no gate automatizado de todo repo T1 (§3 — CI ou pre-commit hook). **Erro = exit 1 por padrão**; `--warn-only` imprime tudo e sai 0, e existe só para a janela de adoção (§10).
 
-1. **Frontmatter válido**: sintaxe dentro do subconjunto suportado (§6 — linha não reconhecida é erro, nunca ignorada), campos obrigatórios (`status`, `date`), data de calendário real em `AAAA-MM-DD`, vocabulário de status por camada.
+1. **Frontmatter válido**: sintaxe dentro do subconjunto suportado (§6 — linha não reconhecida é erro, nunca ignorada), campos obrigatórios (`status`, `date`), data de calendário real em `AAAA-MM-DD`, vocabulário de status por camada, e vocabulário fechado de campos — campo desconhecido sai como aviso (§6).
 2. **Derivação íntegra**: filename no padrão `NNNN-kebab.md`, H1 presente no corpo (após o frontmatter; comentário não conta), id único.
 3. **Grafo íntegro**: `builds-on`/`superseded-by` resolvem (referência cross-repo vira aviso); sem auto-supersessão; `superseded-by` só em ADR e apontando para ADR; ADR `superseded` tem o bloco `VERDADE ATUAL` real, fora de comentário.
 4. **Spec consistente**: `accepted`/`implemented` tem `## Definition of Done`; `implemented` tem `implemented-by` não-vazio e `## Verificação` sem o placeholder — uma Spec só chega a `implemented` no commit de fechamento, onde esses campos são preenchidos.
@@ -175,7 +179,7 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 
 ## 10. Adoção em repos existentes
 
-Incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) `AGENTS.md` router na espinha padrão (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` por 2 semanas, depois sem a flag (erro bloqueia o merge).
+Incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) `AGENTS.md` router na espinha padrão (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente; sem CI disponível, instale o hook (`ln -sf ../../scripts/pre-commit .git/hooks/pre-commit`).
 
 O padrão vive num repo simples (`casa-standard`) com este documento, templates e o `docs-check` de referência. Mudança é PR com conversa.
 
@@ -199,3 +203,4 @@ O padrão vive num repo simples (`casa-standard`) com este documento, templates 
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
+- `scripts/pre-commit` — gate local de referência para repo sem remote (§3)

@@ -12,7 +12,7 @@ O que faz:
   3. Valida frontmatter: só o subconjunto YAML suportado (escalar, lista
      inline, lista em bloco) — linha não reconhecida é ERRO, nunca ignorada;
      campos obrigatórios (status, date), data de calendário real AAAA-MM-DD,
-     vocabulário de status por camada.
+     vocabulário de status por camada; campo fora do vocabulário → AVISO.
   4. Valida grafo: builds-on/superseded-by resolvem (cross-repo vira AVISO);
      sem auto-supersessão; superseded-by só em ADR; ADR superseded exige o
      bloco "VERDADE ATUAL" real, fora de comentário HTML.
@@ -41,6 +41,7 @@ STATUS_VOCAB = {
     "specs": {"draft", "accepted", "implemented", "deprecated"},
 }
 REQUIRED = {"status", "date"}
+KNOWN_KEYS = {"status", "date", "builds-on", "superseded-by", "implemented-by", "deciders"}
 IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
                 "vendor", "__pycache__", ".next", "target", ".tox",
                 ".mypy_cache", ".pytest_cache", ".ruff_cache"}
@@ -158,6 +159,10 @@ def main():
                 continue
             fm, fm_errs = parse_frontmatter(raw_fm)
             errors.extend(f"{did}: {e}" for e in fm_errs)
+            for k in fm:
+                if k not in KNOWN_KEYS:
+                    warnings.append(f"{did}: campo de frontmatter fora do vocabulário: '{k}' "
+                                    "— registre a extensão num ADR do repo ou remova (STANDARD §6)")
             visible = re.sub(r"<!--.*?-->", "", body, flags=re.S)
             title = first_h1(visible)
             if not title:

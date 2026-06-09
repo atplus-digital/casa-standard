@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ADR-0001",
+    "path": "docs/adr/0001-gate-automatizado-sem-remote.md",
+    "layer": "adr",
+    "title": "Gate automatizado do T1 vale por CI ou pre-commit hook — nunca por disciplina",
+    "status": "accepted",
+    "builds-on": [],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
+    "id": "ADR-0002",
+    "path": "docs/adr/0002-backlog-de-docs-sem-tracker.md",
+    "layer": "adr",
+    "title": "Pendências e reservas de NNNN moram em docs/BACKLOG.md quando não há tracker",
+    "status": "accepted",
+    "builds-on": [],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
+    "id": "ADR-0003",
+    "path": "docs/adr/0003-vocabulario-fechado-de-frontmatter.md",
+    "layer": "adr",
+    "title": "Frontmatter tem vocabulário fechado de campos; campo desconhecido sai como aviso",
+    "status": "accepted",
+    "builds-on": [],
+    "superseded-by": null,
+    "implemented-by": []
+  }
+]
