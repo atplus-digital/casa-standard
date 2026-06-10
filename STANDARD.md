@@ -1,10 +1,10 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão:** 1.0 (enxuta, rev. 6) · **Status:** proposed · **Mantenedor:** (definir owner)
+**Versão:** 1.0 (enxuta, rev. 7) · **Status:** accepted (2026-06-09) · **Mantenedor:** (definir owner)
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
-**Regra de promoção:** este padrão só é promovido para a empresa depois que o repo-piloto passa verde no `docs-check`. Um padrão desmentido pela própria referência ensina o agente a desconfiar de todas as suas garantias.
+**Regra de promoção (cumprida em 2026-06-09):** o padrão só seria promovido depois que um repo-piloto passasse verde no `docs-check` — o console-platon passou (66 docs migrados, 0 erros) e o próprio `casa-standard` opera sob o padrão (ADRs 0001–0005, Specs 0001–0002, três suítes no CI). O princípio permanece para toda mudança futura: um padrão desmentido pela própria referência ensina o agente a desconfiar de todas as suas garantias.
 
 ---
 
