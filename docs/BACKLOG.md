@@ -6,8 +6,12 @@ validada pelo `docs-check`.
 ## Decisões pendentes
 
 - Definir owner/mantenedor do padrão (cabeçalho do `STANDARD.md`).
-- Promoção `proposed → accepted` do padrão: aguarda o commit da adoção no repo-piloto
-  (console-platon, validado verde em 2026-06-09).
+
+## Pendências externas
+
+- console-platon: commitar a adoção CASA (working tree validada verde em 2026-06-09;
+  falta gitignore do `.codex/`, decisão sobre o campo `relates`, split da spec 0039 e
+  instalação do pre-commit hook).
 
 ## Reservas de NNNN
 

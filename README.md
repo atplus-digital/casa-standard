@@ -49,7 +49,7 @@ python3 scripts/docs-check --warn-only   # imprime tudo e sai 0 (só na janela d
 
 ## Status
 
-`proposed` — em piloto. O padrão só é promovido para uso amplo depois que um repo-piloto passa verde no `docs-check` (STANDARD §7). Mudança é PR com conversa.
+`accepted` desde 2026-06-09 — regra de promoção cumprida: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão (5 ADRs, 2 Specs, 3 suítes de teste no CI). Mudança é PR com conversa.
 
 ## Licença
 
