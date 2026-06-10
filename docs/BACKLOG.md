@@ -9,9 +9,6 @@ validada pelo `docs-check`.
 
 ## Pendências externas
 
-- console-platon: commitar a adoção CASA (working tree validada verde em 2026-06-09;
-  falta gitignore do `.codex/`, decisão sobre o campo `relates`, split da spec 0039 e
-  instalação do pre-commit hook).
 
 ## Reservas de NNNN
 
