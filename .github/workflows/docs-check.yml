@@ -17,3 +17,5 @@ jobs:
         run: python3 scripts/docs-check
       - name: Testar bootstrap casa-init (SPEC-0001)
         run: scripts/test-casa-init
+      - name: Testar instalador curl|sh (SPEC-0002)
+        run: scripts/test-install

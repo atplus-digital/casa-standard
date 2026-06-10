@@ -42,6 +42,18 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0005",
+    "path": "docs/adr/0005-distribuicao-curl-sh.md",
+    "layer": "adr",
+    "title": "Distribuição do bootstrap é buscador fino via curl|sh no próprio repo",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0004"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -57,6 +69,24 @@
       "scripts/test-casa-init",
       "docs/templates/docs-check.workflow.yml",
       "docs/templates/AGENTS.template.md",
+      ".github/workflows/docs-check.yml"
+    ]
+  },
+  {
+    "id": "SPEC-0002",
+    "path": "docs/specs/0002-install-sh.md",
+    "layer": "specs",
+    "title": "install.sh faz o bootstrap CASA via curl|sh sem clone e sem segunda fonte da verdade",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0005",
+      "ADR-0004"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "install.sh",
+      "scripts/test-install",
+      "scripts/casa-init",
       ".github/workflows/docs-check.yml"
     ]
   }

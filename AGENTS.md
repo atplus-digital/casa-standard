@@ -21,6 +21,7 @@ Não há aplicação para rodar — o "produto" é a doc + o script.
 ```bash
 python3 scripts/docs-check          # exit 0; mesmo comando do CI
 scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
+scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
 ```
 
 ## Git & PRs
@@ -38,6 +39,8 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
   O check de frescor falha se o commitado divergir do gerado.
 - O script é executável sem extensão (`scripts/docs-check`); o CI o invoca via `python3`.
+- `install.sh`: o corpo vive em `main()`, chamada na ÚLTIMA linha — proteção contra
+  download truncado (SPEC-0002). Nunca adicione código depois dessa linha.
 
 ## Mapa de contexto
 
