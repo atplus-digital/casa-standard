@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0002 (install.sh). DoD: exit 0 = todos verdes. Roda SEM rede:
+# os tarballs vêm da working tree (cobre mudanças ainda não commitadas).
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SH="$ROOT/install.sh"
+pass=0; fail=0
+ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+
+W="$(mktemp -d)"
+TB_FLAT="$W/flat.tgz"
+tar -czf "$TB_FLAT" --exclude .git -C "$ROOT" scripts docs
+STAGE="$W/stage"; mkdir -p "$STAGE/casa-standard-abc1234"
+tar -cf - --exclude .git -C "$ROOT" scripts docs | tar -xf - -C "$STAGE/casa-standard-abc1234"
+TB_PREFIX="$W/prefix.tgz"
+tar -czf "$TB_PREFIX" -C "$STAGE" casa-standard-abc1234
+
+# EARS 7 + 2 — tarball local, destino e flags repassados
+A="$W/a"
+CASA_TARBALL="$TB_FLAT" sh "$SH" "$A" --repo-id app-via-curl >/dev/null 2>&1
+ck "EARS-7: bootstrap via tarball local, sem rede"      '[ -f "$A/AGENTS.md" ]'
+ck "EARS-2: flags repassadas intactas ao casa-init"     'grep -q "casa-repo-id: app-via-curl" "$A/AGENTS.md"'
+ck "destino bootstrapado passa o docs-check"            '(cd "$A" && python3 scripts/docs-check)'
+
+# EARS 6 — ref pinado vira o carimbo do router
+B="$W/b"
+CASA_TARBALL="$TB_FLAT" CASA_REF=v9.9.9-teste sh "$SH" "$B" >/dev/null 2>&1
+ck "EARS-6: CASA_REF carimbado no router"               'grep -q "casa-standard-ref: v9.9.9-teste" "$B/AGENTS.md"'
+
+# EARS 8 — formato codeload (diretório-prefixo)
+C="$W/c"
+CASA_TARBALL="$TB_PREFIX" sh "$SH" "$C" >/dev/null 2>&1
+ck "EARS-8: tarball com diretório-prefixo funciona"     '[ -f "$C/AGENTS.md" ]'
+
+# EARS 1 — sem argumentos → diretório corrente
+D="$W/d"; mkdir -p "$D"
+(cd "$D" && CASA_TARBALL="$TB_FLAT" sh "$SH" >/dev/null 2>&1)
+ck "EARS-1: sem argumentos aplica no PWD"               '[ -f "$D/AGENTS.md" ]'
+
+# EARS 3 — só flags → diretório corrente como destino
+E="$W/e"; mkdir -p "$E"
+(cd "$E" && CASA_TARBALL="$TB_FLAT" sh "$SH" --repo-id soflags >/dev/null 2>&1)
+ck "EARS-3: só flags assume PWD como destino"           'grep -q "casa-repo-id: soflags" "$E/AGENTS.md"'
+
+# EARS 4 — sem python3: falha clara antes de escrever qualquer coisa
+F="$W/f"; mkdir -p "$F"
+FAKEBIN="$W/bin"; mkdir -p "$FAKEBIN"
+ln -sf "$(command -v sh)" "$FAKEBIN/sh"
+OUT=$( (cd "$F" && env PATH="$FAKEBIN" CASA_TARBALL="$TB_FLAT" sh "$SH" 2>&1); echo "rc=$?" )
+ck "EARS-4: sem python3 falha com mensagem clara"       'echo "$OUT" | grep -q "python3" && echo "$OUT" | grep -q "rc=1"'
+ck "EARS-4: nada escrito no destino"                    '[ ! -e "$F/AGENTS.md" ]'
+
+# EARS 5 — proteção estrutural contra download truncado
+ck "EARS-5: corpo em main(), chamada na última linha"   '[ "$(tail -1 "$SH")" = "main \"\$@\"" ]'
+ck "sintaxe POSIX sh válida (sh -n)"                    'sh -n "$SH"'
+
+echo
+echo "==== $pass PASS / $fail FAIL ===="
+[ "$fail" -eq 0 ]

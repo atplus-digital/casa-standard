@@ -42,6 +42,9 @@ def sh(args, cwd=None):
 
 
 def src_ref():
+    env = os.environ.get("CASA_STANDARD_REF")
+    if env:
+        return env  # setado pelo install.sh (SPEC-0002): ref pinado ou sha de main
     r = sh(["git", "-C", str(SRC), "rev-parse", "--short", "HEAD"])
     return r.stdout.strip() if r.returncode == 0 else "unknown"
 

@@ -8,3 +8,4 @@
 | [ADR-0002](0002-backlog-de-docs-sem-tracker.md) | Pendências e reservas de NNNN moram em docs/BACKLOG.md quando não há tracker | accepted |
 | [ADR-0003](0003-vocabulario-fechado-de-frontmatter.md) | Frontmatter tem vocabulário fechado de campos; campo desconhecido sai como aviso | accepted |
 | [ADR-0004](0004-bootstrap-casa-init.md) | Bootstrap e atualização de repo adotante é script idempotente no casa-standard | accepted |
+| [ADR-0005](0005-distribuicao-curl-sh.md) | Distribuição do bootstrap é buscador fino via curl|sh no próprio repo | accepted |
