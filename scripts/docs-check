@@ -187,7 +187,8 @@ def main():
                 errors.append(f"{path}: id derivado duplicado '{did}' (também em {docs[did]['path']})")
                 continue
             ib = fm.get("implemented-by") or []
-            docs[did] = {"id": did, "path": str(path.relative_to(root)), "layer": layer,
+            # as_posix: no Windows str(Path) usa "\", divergindo do índice gerado no CI
+            docs[did] = {"id": did, "path": path.relative_to(root).as_posix(), "layer": layer,
                          "title": title, "status": st,
                          "builds-on": fm.get("builds-on") or [],
                          "superseded-by": fm.get("superseded-by"),
