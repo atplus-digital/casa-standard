@@ -38,8 +38,16 @@ WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
 WORKFLOW_DEST = ".github/workflows/docs-check.yml"
 
 
+def utf8_stdio():
+    # Windows usa cp1252 no stdout redirecionado; a saída tem não-ASCII ("→").
+    for s in (sys.stdout, sys.stderr):
+        if hasattr(s, "reconfigure"):
+            s.reconfigure(encoding="utf-8", errors="replace")
+
+
 def sh(args, cwd=None):
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True,
+                          encoding="utf-8", errors="replace")
 
 
 def remote_host(url):
@@ -63,6 +71,7 @@ def say(tag, msg):
 
 
 def main():
+    utf8_stdio()
     ap = argparse.ArgumentParser(
         description="instala/atualiza a infraestrutura CASA num repo (SPEC-0001)")
     ap.add_argument("destino")
