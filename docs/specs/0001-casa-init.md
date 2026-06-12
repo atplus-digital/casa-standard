@@ -1,7 +1,7 @@
 ---
 status: implemented
 date: 2026-06-09
-builds-on: [ADR-0004, ADR-0001]
+builds-on: [ADR-0004, ADR-0001, ADR-0006]
 implemented-by:
   - scripts/casa-init
   - scripts/test-casa-init
@@ -32,9 +32,10 @@ scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 3. Trata a **identidade** (propriedade do repo): `AGENTS.md` é instanciado do template só
    se ausente (repo-id, tier e ref carimbados); se existir, só a linha `casa-standard-ref`
    é atualizada (quando presente).
-4. Instala o **gate** (ADR-0001): remote → workflow de CI (de
-   `docs/templates/docs-check.workflow.yml`, criado se ausente); sem remote → pre-commit
-   hook (symlink para `scripts/pre-commit`); sem `.git` → orienta.
+4. Instala o **gate** (ADR-0006): remote GitHub → workflow de CI (de
+   `docs/templates/docs-check.workflow.yml`, criado se ausente); sem remote ou remote
+   de host sem adaptador de CI → pre-commit hook (symlink para `scripts/pre-commit`),
+   com AVISO quando há remote; sem `.git` → orienta.
 5. **Diagnostica**: roda o `docs-check` do destino e relata — migração de conteúdo é
    trabalho humano (§10), não deste script.
 
@@ -55,12 +56,13 @@ scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 | 3 | `AGENTS.md` já existe no destino | preservá-lo; atualizar só a linha `casa-standard-ref`, se presente |
 | 4 | um arquivo de toolchain difere da origem | sobrescrevê-lo e relatar "atualizado" |
 | 5 | não há `.git` no destino | não instalar gate e orientar a rodar de novo após `git init` |
-| 6 | há `.git` sem remote | instalar o pre-commit hook (ADR-0001) |
-| 7 | há `.git` com remote | criar o workflow de CI se ausente; hook não é instalado |
+| 6 | há `.git` sem remote | instalar o pre-commit hook (ADR-0006) |
+| 7 | há `.git` com remote do GitHub | criar o workflow de CI se ausente; hook não é instalado |
 | 8 | `.git/hooks/pre-commit` existe e não é o do CASA | não tocá-lo e emitir AVISO |
 | 9 | o `docs-check` falha no destino pós-instalação | manter exit 0 e relatar a migração pendente (§10) |
 | 10 | rodado duas vezes seguidas sem mudança na origem | a segunda execução não altera nenhum byte |
 | 11 | `--repo-id` ausente | derivar do basename do destino |
+| 12 | há `.git` com remote de host sem adaptador de CI (ex.: GitLab) | instalar o pre-commit hook e emitir AVISO orientando a integrar o `docs-check` ao CI do host (ADR-0006) |
 
 ## Questões em aberto
 
@@ -84,4 +86,6 @@ python3 scripts/docs-check    # exit 0 — o próprio repo segue verde
 ```text
 2026-06-09 · scripts/test-casa-init → 16 PASS / 0 FAIL (EARS 1–11 cobertos), exit 0
 2026-06-09 · python3 scripts/docs-check → 5 docs · 0 erro(s) · 0 aviso(s), exit 0
+2026-06-12 · scripts/test-casa-init → 19 PASS / 0 FAIL (EARS 1–12 cobertos; gate por host, ADR-0006), exit 0
+2026-06-12 · python3 scripts/docs-check → 8 docs · 0 erro(s) · 0 aviso(s), exit 0
 ```

@@ -1,10 +1,14 @@
 ---
-status: accepted
+status: superseded
 date: 2026-06-09
 builds-on: []
-superseded-by: null
+superseded-by: ADR-0006
 deciders: [maicon]
 ---
+
+> ⚠️ VERDADE ATUAL: o princípio segue valendo — gate automatizado por CI ou pre-commit
+> hook, nunca disciplina. Revogado: o despacho "com remote → CI" (instalava workflow do
+> GitHub em qualquer host). Regra atual: por host do remote — ver ADR-0006.
 
 # Gate automatizado do T1 vale por CI ou pre-commit hook — nunca por disciplina
 

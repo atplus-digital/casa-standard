@@ -4,9 +4,9 @@
     "path": "docs/adr/0001-gate-automatizado-sem-remote.md",
     "layer": "adr",
     "title": "Gate automatizado do T1 vale por CI ou pre-commit hook — nunca por disciplina",
-    "status": "accepted",
+    "status": "superseded",
     "builds-on": [],
-    "superseded-by": null,
+    "superseded-by": "ADR-0006",
     "implemented-by": []
   },
   {
@@ -54,6 +54,18 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0006",
+    "path": "docs/adr/0006-gate-por-host-do-remote.md",
+    "layer": "adr",
+    "title": "Adaptador do gate é escolhido pelo host do remote — hook é o fallback universal",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0001"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -61,7 +73,8 @@
     "status": "implemented",
     "builds-on": [
       "ADR-0004",
-      "ADR-0001"
+      "ADR-0001",
+      "ADR-0006"
     ],
     "superseded-by": null,
     "implemented-by": [

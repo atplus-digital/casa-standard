@@ -34,11 +34,18 @@ D="$(mktemp -d)/g"; mkdir -p "$D"; git init -q "$D"
 python3 "$INIT" "$D" >/dev/null
 ck "EARS-6: pre-commit hook instalado sem remote"    '[ -e "$D/.git/hooks/pre-commit" ]'
 
-# EARS 7 — git com remote → workflow, sem hook
-E="$(mktemp -d)/h"; mkdir -p "$E"; git init -q "$E"; git -C "$E" remote add origin https://example.invalid/x.git
+# EARS 7 — git com remote GitHub → workflow, sem hook (URL scp-like cobre esse parser)
+E="$(mktemp -d)/h"; mkdir -p "$E"; git init -q "$E"; git -C "$E" remote add origin git@github.com:org/x.git
 python3 "$INIT" "$E" >/dev/null
-ck "EARS-7: workflow de CI criado com remote"        '[ -f "$E/.github/workflows/docs-check.yml" ]'
-ck "EARS-7: hook não instalado com remote"           '[ ! -e "$E/.git/hooks/pre-commit" ]'
+ck "EARS-7: workflow de CI criado com remote GitHub" '[ -f "$E/.github/workflows/docs-check.yml" ]'
+ck "EARS-7: hook não instalado com remote GitHub"    '[ ! -e "$E/.git/hooks/pre-commit" ]'
+
+# EARS 12 — remote sem adaptador de CI (ex.: GitLab) → hook + AVISO, sem workflow (ADR-0006)
+H="$(mktemp -d)/gl"; mkdir -p "$H"; git init -q "$H"; git -C "$H" remote add origin https://gitlab.com/org/x.git
+OUT=$(python3 "$INIT" "$H" 2>&1)
+ck "EARS-12: hook instalado com remote não-GitHub"   '[ -e "$H/.git/hooks/pre-commit" ]'
+ck "EARS-12: workflow não criado com remote não-GitHub" '[ ! -f "$H/.github/workflows/docs-check.yml" ]'
+ck "EARS-12: AVISO orienta integrar ao CI do host"   'echo "$OUT" | grep -q "AVISO.*sem adaptador de CI.*gitlab.com"'
 
 # EARS 8 — hook alheio não é tocado
 F="$(mktemp -d)/f"; mkdir -p "$F"; git init -q "$F"

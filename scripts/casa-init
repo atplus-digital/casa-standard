@@ -13,8 +13,9 @@ Aditivo e idempotente:
   - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
     se ausente — com repo-id, tier e casa-standard-ref carimbados; se existir,
     apenas a linha casa-standard-ref é atualizada (quando presente).
-  - Gate (ADR-0001): com remote → workflow de CI (criado se ausente); sem
-    remote → pre-commit hook (hook alheio não é tocado); sem .git → orienta.
+  - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente);
+    sem remote ou host sem adaptador de CI → pre-commit hook, com AVISO
+    quando há remote (hook alheio não é tocado); sem .git → orienta.
   - Diagnóstico: roda o docs-check do destino ao final e relata. Migração de
     conteúdo legado é trabalho humano (STANDARD §10), não deste script.
 
@@ -37,8 +38,24 @@ WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
 WORKFLOW_DEST = ".github/workflows/docs-check.yml"
 
 
+def utf8_stdio():
+    # Windows usa cp1252 no stdout redirecionado; a saída tem não-ASCII ("→").
+    for s in (sys.stdout, sys.stderr):
+        if hasattr(s, "reconfigure"):
+            s.reconfigure(encoding="utf-8", errors="replace")
+
+
 def sh(args, cwd=None):
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    return subprocess.run(args, cwd=cwd, capture_output=True,
+                          encoding="utf-8", errors="replace")
+
+
+def remote_host(url):
+    """Host de uma URL de remote: https/ssh (scheme://[user@]host/…) e scp-like (user@host:…)."""
+    m = re.match(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)", url, re.I)
+    if not m:
+        m = re.match(r"^(?:[^@/]+@)?([^:/]+):", url)
+    return m.group(1).lower() if m else ""
 
 
 def src_ref():
@@ -54,6 +71,7 @@ def say(tag, msg):
 
 
 def main():
+    utf8_stdio()
     ap = argparse.ArgumentParser(
         description="instala/atualiza a infraestrutura CASA num repo (SPEC-0001)")
     ap.add_argument("destino")
@@ -104,14 +122,17 @@ def main():
         else:
             say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
 
-    # 3. Gate (ADR-0001)
+    # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
     r = sh(["git", "-C", str(target), "rev-parse", "--git-dir"])
     if r.returncode != 0:
         say("AVISO", "sem .git: gate não instalado — rode `git init` e casa-init de novo (STANDARD §3)")
     else:
         gd = Path(r.stdout.strip())
         gitdir = gd if gd.is_absolute() else (target / gd)
-        if sh(["git", "-C", str(target), "remote"]).stdout.strip():
+        urls = [ln.split(None, 1)[1]
+                for ln in sh(["git", "-C", str(target), "config", "--get-regexp",
+                              r"^remote\..*\.url$"]).stdout.splitlines() if " " in ln]
+        if any(remote_host(u) == "github.com" for u in urls):
             wf = target / WORKFLOW_DEST
             if wf.exists():
                 say("preservado", f"{WORKFLOW_DEST} (workflow é do repo)")
@@ -120,6 +141,10 @@ def main():
                 shutil.copy2(SRC / WORKFLOW_TEMPLATE, wf)
                 say("criado", f"{WORKFLOW_DEST} (gate: CI)")
         else:
+            if urls:
+                say("AVISO", f"remote sem adaptador de CI ({remote_host(urls[0]) or urls[0]}): "
+                             "gate local via pre-commit hook (ADR-0006) — integre "
+                             "`scripts/docs-check` ao CI do seu host")
             hook = gitdir / "hooks" / "pre-commit"
             ours = target / "scripts" / "pre-commit"
             if hook.exists() or hook.is_symlink():
@@ -139,7 +164,7 @@ def main():
                 except OSError:
                     shutil.copy2(ours, hook)
                     hook.chmod(0o755)
-                say("criado", ".git/hooks/pre-commit → scripts/pre-commit (gate: local, ADR-0001)")
+                say("criado", ".git/hooks/pre-commit → scripts/pre-commit (gate: local, ADR-0006)")
 
     # 4. Diagnóstico — migração de conteúdo é humana (§10)
     print()
