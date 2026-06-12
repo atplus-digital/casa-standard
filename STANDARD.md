@@ -44,7 +44,7 @@ scripts/
 Cada repo declara seu nível no `AGENTS.md`:
 
 - **T0 — leve** (script, POC, ferramenta descartável): só `AGENTS.md` + DoD mínimo (build/teste verde).
-- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` em **gate automatizado** — CI quando há remote; pre-commit hook quando não há (referência: `scripts/pre-commit`). Gate documental ("está no DoD do router") não conta: é disciplina, não automação.
+- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` em **gate automatizado** — CI quando o remote é de host com adaptador (hoje: GitHub); pre-commit hook nos demais casos — sem remote ou host sem adaptador, com aviso para integrar o `docs-check` ao CI do host (referência: `scripts/pre-commit`; decisão: ADR-0006 do `casa-standard`). Gate documental ("está no DoD do router") não conta: é disciplina, não automação.
 
 Dentro de T1, o que escrever é decidido por **gatilho**:
 
