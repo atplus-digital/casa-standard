@@ -43,10 +43,11 @@ E="$W/e"; mkdir -p "$E"
 ck "EARS-3: só flags assume PWD como destino"           'grep -q "casa-repo-id: soflags" "$E/AGENTS.md"'
 
 # EARS 4 — sem python3: falha clara antes de escrever qualquer coisa
+# sh por caminho absoluto + PATH vazio: não depende de symlink de sh (não roda
+# no Windows/Git Bash) e o `command -v python3` do install.sh só vê o dir vazio.
 F="$W/f"; mkdir -p "$F"
-FAKEBIN="$W/bin"; mkdir -p "$FAKEBIN"
-ln -sf "$(command -v sh)" "$FAKEBIN/sh"
-OUT=$( (cd "$F" && env PATH="$FAKEBIN" CASA_TARBALL="$TB_FLAT" sh "$SH" 2>&1); echo "rc=$?" )
+EMPTYBIN="$W/bin"; mkdir -p "$EMPTYBIN"
+OUT=$( (cd "$F" && env PATH="$EMPTYBIN" CASA_TARBALL="$TB_FLAT" "$(command -v sh)" "$SH" 2>&1); echo "rc=$?" )
 ck "EARS-4: sem python3 falha com mensagem clara"       'echo "$OUT" | grep -q "python3" && echo "$OUT" | grep -q "rc=1"'
 ck "EARS-4: nada escrito no destino"                    '[ ! -e "$F/AGENTS.md" ]'
 
