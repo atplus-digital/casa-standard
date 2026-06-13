@@ -53,5 +53,6 @@ deciders: []
 
 ## Notas
 <!-- ⚠️ Não inventar: decisão de negócio não tomada → issue tracker, não ADR.
-     Critério mecânico: typo/link → pode editar; mudou QUALQUER aspecto da
-     decisão → ADR novo que supersede. -->
+     Critério mecânico: em ADR já aceito só frontmatter e o bloco VERDADE ATUAL
+     mudam (lint de imutabilidade, STANDARD §8). Qualquer mudança de corpo —
+     inclusive typo/link → ADR novo que supersede. -->

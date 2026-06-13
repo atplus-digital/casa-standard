@@ -16,6 +16,7 @@ Critério de design: **complexidade sustentada por automação é barata; comple
 ## Conteúdo deste repo
 
 - **[STANDARD.md](STANDARD.md)** — o documento normativo. É a fonte da verdade.
+- **[CHANGELOG.md](CHANGELOG.md)** — versões do contrato CASA.
 - **[docs/templates/](docs/templates/)** — templates oficiais de `AGENTS.md`, ADR e Spec.
 - **[scripts/docs-check](scripts/docs-check)** — implementação de referência do validador de CI (Python, sem dependências).
 
@@ -49,7 +50,7 @@ python3 scripts/docs-check --warn-only   # imprime tudo e sai 0 (só na janela d
 
 ## Status
 
-`accepted` desde 2026-06-09 — regra de promoção cumprida: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão (5 ADRs, 2 Specs, 3 suítes de teste no CI). Mudança é PR com conversa.
+CASA `1.1`, `accepted` desde 2026-06-13. Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
 
 ## Licença
 

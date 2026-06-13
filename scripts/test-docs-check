@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0003 (docs-check). DoD: exit 0 = todos verdes.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CHECK="$ROOT/scripts/docs-check"
+INIT="$ROOT/scripts/casa-init"
+pass=0; fail=0
+ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+
+mkrepo() {
+    R="$(mktemp -d)"
+    mkdir -p "$R"
+    cat > "$R/AGENTS.md" <<'EOF'
+# AGENTS.md
+
+```yaml
+casa-repo-id: teste
+casa-tier: T1
+casa-version: 1.1
+casa-standard-ref: test
+```
+
+## Como validar (DoD global do repo)
+
+```bash
+python3 scripts/docs-check
+```
+
+## Mapa de contexto
+
+| Capítulo | Quando carregar |
+|---|---|
+| (nenhum ainda) | — |
+EOF
+}
+
+spec_doc() {
+    status="$1"; impl="$2"; questions="$3"; dod="$4"; verification="$5"
+    mkdir -p "$R/docs/specs"
+    cat > "$R/docs/specs/0001-x.md" <<EOF
+---
+status: $status
+date: 2026-06-13
+builds-on: []
+implemented-by: $impl
+---
+
+# Spec de teste
+
+## Questões em aberto
+
+$questions
+
+## Definition of Done
+
+\`\`\`bash
+$dod
+\`\`\`
+
+## Verificação
+
+\`\`\`text
+$verification
+\`\`\`
+EOF
+}
+
+adr_doc() {
+    path="$1"; status="$2"; superseded_by="$3"; truth="$4"; body="$5"
+    mkdir -p "$(dirname "$path")"
+    cat > "$path" <<EOF
+---
+status: $status
+date: 2026-06-13
+builds-on: []
+superseded-by: $superseded_by
+deciders: [maicon]
+---
+
+$truth
+# Decisão de teste
+
+## Contexto e problema
+
+$body
+
+## Direcionadores da decisão
+
+- teste
+
+## Opções consideradas
+
+### Opção 1 — teste
+**Prós:** simples
+**Contras:** nenhum
+
+## Decisão
+
+Manter teste.
+
+## Consequências
+
+- teste
+
+## Confirmação
+
+\`\`\`bash
+true
+\`\`\`
+EOF
+}
+
+# EARS 1 — greenfield via casa-init continua verde
+A="$(mktemp -d)/novo"
+python3 "$INIT" "$A" --repo-id app >/dev/null
+ck "EARS-1: repo novo criado pelo casa-init passa docs-check" \
+   '(cd "$A" && python3 scripts/docs-check)'
+
+# EARS 2 — router sem casa-version falha
+mkrepo
+grep -v '^casa-version:' "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-2: router sem casa-version falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "casa-version"'
+
+# EARS 3 — ponteiro de contexto quebrado falha
+mkrepo
+awk '{ if ($0 == "| (nenhum ainda) | — |") print "| `docs/context/INFRA.md` | mexeu em infra |"; else print }' \
+    "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-3: Mapa de contexto com arquivo inexistente falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Mapa de contexto"'
+
+# EARS 4 — Spec accepted com questão aberta falha
+mkrepo
+spec_doc accepted "[]" "- [ ] decidir borda" "true" "não implementada"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-4: Spec accepted com checkbox aberto falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "questões em aberto"'
+
+# EARS 5 — DoD com placeholder falha
+mkrepo
+spec_doc accepted "[]" "(nenhuma)" "npm test -- --run <escopo>" "não implementada"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-5: DoD com placeholder falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "placeholder"'
+
+# EARS 6 — implemented-by precisa existir
+mkrepo
+spec_doc implemented "[nao-existe.py]" "(nenhuma)" "true" "true -> exit 0"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-6: implemented-by inexistente falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "path inexistente"'
+
+# EARS 7 — ADR aceito não aceita emenda substantiva
+mkrepo
+mkdir -p "$R/docs/adr"
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."
+(cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git init -q &&
+ git config user.email casa@example.invalid && git config user.name CASA &&
+ git add . && git commit -q -m base)
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto alterado."
+(cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m bad)
+OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
+ck "EARS-7: emenda substantiva em ADR aceito falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "corpo alterado"'
+
+# EARS 8 — supersessão com VERDADE ATUAL passa
+mkrepo
+mkdir -p "$R/docs/adr"
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."
+(cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git init -q &&
+ git config user.email casa@example.invalid && git config user.name CASA &&
+ git add . && git commit -q -m base)
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova decisão."
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: substituído por ADR-0002" "Contexto original."
+(cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m supersede)
+OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
+ck "EARS-8: supersessão com VERDADE ATUAL passa" '[ "$RC" -eq 0 ]'
+
+echo
+echo "==== $pass PASS / $fail FAIL ===="
+[ "$fail" -eq 0 ]
