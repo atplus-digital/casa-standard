@@ -85,4 +85,5 @@ python3 scripts/docs-check    # exit 0 — o próprio repo segue verde
 2026-06-09 · scripts/test-install → 11 PASS / 0 FAIL (EARS 1–8 cobertos; EARS-9 por leitura), exit 0
 2026-06-09 · scripts/test-casa-init → 16 PASS / 0 FAIL (regressão SPEC-0001), exit 0
 2026-06-09 · python3 scripts/docs-check → 7 docs · 0 erro(s) · 0 aviso(s), exit 0
+2026-06-13 · bash scripts/test-install → 11 PASS / 0 FAIL (regressão com CASA 1.1), exit 0
 ```

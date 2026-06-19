@@ -12,6 +12,7 @@ tree_hash() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cat | cksum); }
 A="$(mktemp -d)/novo"
 python3 "$INIT" "$A" --repo-id meu-app >/dev/null
 ck "EARS-1/11: router criado com repo-id"            'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
+ck "router criado com casa-version"                  'grep -q "casa-version: 1.1" "$A/AGENTS.md"'
 ck "ref carimbado (placeholder substituído)"         'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
 ck "docs-check verde no destino recém-criado"        '(cd "$A" && python3 scripts/docs-check)'
 H1=$(tree_hash "$A"); python3 "$INIT" "$A" --repo-id meu-app >/dev/null; H2=$(tree_hash "$A")
@@ -21,6 +22,20 @@ ck "EARS-10: segunda execução não muda nenhum byte"  '[ "$H1" = "$H2" ]'
 B="$(mktemp -d)/r"; mkdir -p "$B"; printf 'meu router\n' > "$B/AGENTS.md"
 python3 "$INIT" "$B" >/dev/null
 ck "EARS-3: AGENTS.md existente preservado"          '[ "$(cat "$B/AGENTS.md")" = "meu router" ]'
+
+# Router antigo com bloco yaml recebe metadados tool-owned sem perder conteúdo
+BV="$(mktemp -d)/rv"; mkdir -p "$BV"; cat > "$BV/AGENTS.md" <<'EOF'
+# AGENTS.md
+```yaml
+casa-repo-id: velho
+casa-tier: T1
+```
+conteúdo do repo
+EOF
+python3 "$INIT" "$BV" >/dev/null
+ck "router antigo recebe casa-version"               'grep -q "casa-version: 1.1" "$BV/AGENTS.md"'
+ck "router antigo recebe casa-standard-ref"          'grep -q "^casa-standard-ref: " "$BV/AGENTS.md"'
+ck "router antigo preserva conteúdo do repo"         'grep -q "conteúdo do repo" "$BV/AGENTS.md"'
 
 # EARS 4 — toolchain desatualizada é da ferramenta
 C="$(mktemp -d)/u"; python3 "$INIT" "$C" >/dev/null

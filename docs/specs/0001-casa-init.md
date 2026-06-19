@@ -25,13 +25,13 @@ gate do §3) sem que nada do conteúdo dele seja tocado. Rodar de novo atualiza 
 scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 ```
 
-1. Resolve o destino (cria o diretório se não existir) e o `casa-standard-ref` (sha curto
-   da origem).
+1. Resolve o destino (cria o diretório se não existir), o `casa-version` do contrato e o
+   `casa-standard-ref` (sha curto da origem).
 2. Copia a **toolchain** (propriedade da ferramenta): `scripts/docs-check`,
    `scripts/pre-commit`, `docs/templates/*` — cria, atualiza se difere, ou relata "em dia".
 3. Trata a **identidade** (propriedade do repo): `AGENTS.md` é instanciado do template só
-   se ausente (repo-id, tier e ref carimbados); se existir, só a linha `casa-standard-ref`
-   é atualizada (quando presente).
+   se ausente (repo-id, tier, versão e ref carimbados); se existir, só `casa-version` e
+   `casa-standard-ref` são atualizados/inseridos no bloco `yaml` quando possível.
 4. Instala o **gate** (ADR-0006): remote GitHub → workflow de CI (de
    `docs/templates/docs-check.workflow.yml`, criado se ausente); sem remote ou remote
    de host sem adaptador de CI → pre-commit hook (symlink para `scripts/pre-commit`),
@@ -45,7 +45,7 @@ scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 - Exit 0 = instalação concluída; pendência de migração de docs é relatório, não falha.
 - Exit ≠ 0 só por erro de uso (destino inválido, destino = casa-standard).
 - **Nunca toca**: `docs/adr|specs|context`, `README`, `LICENSE`, código, router existente
-  (exceto a linha `casa-standard-ref`, que pertence à ferramenta).
+  (exceto `casa-version` e `casa-standard-ref`, que pertencem à ferramenta).
 
 ## Casos de borda
 
@@ -53,7 +53,7 @@ scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 |---|---|---|
 | 1 | o destino não existe | criá-lo e seguir como repo novo |
 | 2 | o destino é o próprio casa-standard | abortar com erro e exit ≠ 0 |
-| 3 | `AGENTS.md` já existe no destino | preservá-lo; atualizar só a linha `casa-standard-ref`, se presente |
+| 3 | `AGENTS.md` já existe no destino | preservá-lo; atualizar/inserir só `casa-version` e `casa-standard-ref` no bloco `yaml`, se houver |
 | 4 | um arquivo de toolchain difere da origem | sobrescrevê-lo e relatar "atualizado" |
 | 5 | não há `.git` no destino | não instalar gate e orientar a rodar de novo após `git init` |
 | 6 | há `.git` sem remote | instalar o pre-commit hook (ADR-0006) |
@@ -88,4 +88,6 @@ python3 scripts/docs-check    # exit 0 — o próprio repo segue verde
 2026-06-09 · python3 scripts/docs-check → 5 docs · 0 erro(s) · 0 aviso(s), exit 0
 2026-06-12 · scripts/test-casa-init → 19 PASS / 0 FAIL (EARS 1–12 cobertos; gate por host, ADR-0006), exit 0
 2026-06-12 · python3 scripts/docs-check → 8 docs · 0 erro(s) · 0 aviso(s), exit 0
+2026-06-13 · bash scripts/test-casa-init → 23 PASS / 0 FAIL (casa-version + regressões), exit 0
+2026-06-13 · python3 scripts/docs-check → 10 docs · 0 erro(s) · 0 aviso(s), exit 0
 ```

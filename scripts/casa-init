@@ -11,8 +11,9 @@ Aditivo e idempotente:
   - Toolchain (da ferramenta; sobrescreve quando difere): scripts/docs-check,
     scripts/pre-commit e docs/templates/*.
   - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
-    se ausente — com repo-id, tier e casa-standard-ref carimbados; se existir,
-    apenas a linha casa-standard-ref é atualizada (quando presente).
+    se ausente — com repo-id, tier, casa-version e casa-standard-ref carimbados; se
+    existir, apenas casa-version e casa-standard-ref são atualizados/inseridos no
+    bloco yaml quando possível.
   - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente);
     sem remote ou host sem adaptador de CI → pre-commit hook, com AVISO
     quando há remote (hook alheio não é tocado); sem .git → orienta.
@@ -26,6 +27,7 @@ import argparse, filecmp, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
+CASA_VERSION = "1.1"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/pre-commit",
@@ -70,6 +72,40 @@ def say(tag, msg):
     print(f"{tag:>11}  {msg}")
 
 
+def upsert_router_meta(text, ref):
+    lines = text.splitlines()
+    try:
+        start = next(i for i, ln in enumerate(lines) if ln.strip().lower() == "```yaml")
+        end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "```")
+    except StopIteration:
+        return text, False
+
+    def set_key(key, value, after_keys):
+        pattern = re.compile(rf"^({re.escape(key)}:)(\s*)(\S+)(.*)$")
+        for i in range(start + 1, end):
+            m = pattern.match(lines[i])
+            if m:
+                if m.group(3) == value:
+                    return True
+                lines[i] = f"{key}: {value}{m.group(4)}"
+                return True
+        insert_at = end
+        for i in range(start + 1, end):
+            if any(re.match(rf"^{re.escape(k)}:", lines[i]) for k in after_keys):
+                insert_at = i + 1
+        lines.insert(insert_at, f"{key}: {value}")
+        return True
+
+    changed = False
+    before = list(lines)
+    set_key("casa-version", CASA_VERSION, ["casa-tier", "casa-repo-id"])
+    end += len(lines) - len(before)
+    before = list(lines)
+    set_key("casa-standard-ref", ref, ["casa-version", "casa-tier", "casa-repo-id"])
+    changed = lines != text.splitlines()
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
+
+
 def main():
     utf8_stdio()
     ap = argparse.ArgumentParser(
@@ -110,15 +146,17 @@ def main():
         text = text.replace("<nome-canonico-do-repo>", repo_id)
         if args.tier == "T0":
             text = text.replace("casa-tier: T1", "casa-tier: T0", 1)
+        text = text.replace("casa-version: 1.1", f"casa-version: {CASA_VERSION}", 1)
         text = text.replace("casa-standard-ref: <sha>", f"casa-standard-ref: {ref}", 1)
-        router.write_text(text, encoding="utf-8")
+        # write_bytes (não write_text) preserva LF no Windows — write_text traduz \n→\r\n
+        router.write_bytes(text.encode("utf-8"))
         say("criado", f"AGENTS.md (router; repo-id={repo_id}, tier={args.tier} — preencha as seções)")
     else:
         old = router.read_text(encoding="utf-8")
-        new = re.sub(r"^(casa-standard-ref:)\s*\S+", rf"\g<1> {ref}", old, count=1, flags=re.M)
+        new, _ = upsert_router_meta(old, ref)
         if new != old:
-            router.write_text(new, encoding="utf-8")
-            say("atualizado", f"AGENTS.md: casa-standard-ref → {ref}")
+            router.write_bytes(new.encode("utf-8"))  # preserva LF no Windows (ver acima)
+            say("atualizado", f"AGENTS.md: casa-version → {CASA_VERSION}; casa-standard-ref → {ref}")
         else:
             say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
 

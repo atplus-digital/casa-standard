@@ -3,6 +3,8 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
+casa-version: 1.1
+casa-standard-ref: self
 ```
 
 > ROUTER (CASA §4): carga sempre, teto ~150 linhas. Só alto-ROI transversal.
@@ -20,6 +22,7 @@ Não há aplicação para rodar — o "produto" é a doc + o script.
 
 ```bash
 python3 scripts/docs-check          # exit 0; mesmo comando do CI
+bash scripts/test-docs-check        # exit 0; cenários do validador (SPEC-0003)
 scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
 scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
 ```
@@ -35,6 +38,8 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 
 - O `docs-check` aceita só um **subconjunto** de YAML no frontmatter (escalar, lista inline,
   lista em bloco). Sintaxe fora disso é ERRO proposital, não silêncio — ver STANDARD §6.
+- O router (`AGENTS.md`) também é validado: metadados CASA, DoD global e ponteiros de
+  contexto precisam estar íntegros.
 - Erro = `exit 1` por padrão. `--warn-only` sai 0 e existe só para a janela de adoção.
 - Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
   O check de frescor falha se o commitado divergir do gerado.
@@ -53,6 +58,7 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 ## Mapa de docs
 
 - Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
+- Versões do contrato CASA: `CHANGELOG.md`
 - Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
 - Pendências e reservas de NNNN: `docs/BACKLOG.md` (reserve lá antes de criar ADR/Spec novo)
 - Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
