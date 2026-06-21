@@ -29,6 +29,7 @@ scripts/test-install                # exit 0; cenários do instalador curl|sh (S
 
 ## Git & PRs
 
+Fluxo de contribuição (issue → branch `<tipo>/<issue>` → PR com `Closes #NNN`): `CONTRIBUTING.md`.
 Mudança no padrão é PR com conversa (STANDARD §10). `STANDARD.md` é normativo: alterou o
 comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não divergem.
 
