@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0003 (docs-check). DoD: exit 0 = todos verdes.
+# Cenários da SPEC-0003 e SPEC-0004 (docs-check). DoD: exit 0 = todos verdes.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
@@ -16,7 +16,7 @@ mkrepo() {
 ```yaml
 casa-repo-id: teste
 casa-tier: T1
-casa-version: 1.1
+casa-version: 1.2
 casa-standard-ref: test
 ```
 
@@ -177,6 +177,45 @@ adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: substituí
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m supersede)
 OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
 ck "EARS-8: supersessão com VERDADE ATUAL passa" '[ "$RC" -eq 0 ]'
+
+# --- SPEC-0004: capítulo de contexto reconhecido (TESTS) ---
+
+decl_tests() { # injeta o ponteiro do capítulo $1 no Mapa de contexto do router
+    awk -v row="| \`$1\` | mexeu em teste |" \
+        '{ if ($0 == "| (nenhum ainda) | — |") print row; else print }' \
+        "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+    mkdir -p "$R/docs/context"
+}
+
+# EARS 9 — TESTS.md declarado com comando canônico passa
+mkrepo
+decl_tests "docs/context/TESTS.md"
+cat > "$R/docs/context/TESTS.md" <<'EOF'
+# Testes
+
+## Comandos canônicos
+
+```bash
+pytest -q
+```
+EOF
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-9: TESTS.md declarado com comando canônico passa" '[ "$RC" -eq 0 ]'
+
+# EARS 10 — TESTS.md declarado sem comando falha
+mkrepo
+decl_tests "docs/context/TESTS.md"
+printf '# Testes\n\nRodamos os testes manualmente antes do merge.\n' > "$R/docs/context/TESTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-10: TESTS.md declarado sem comando falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "capítulo reconhecido"'
+
+# EARS 11 — capítulo genérico (INFRA) sem comando passa: só TESTS é reconhecido
+mkrepo
+decl_tests "docs/context/INFRA.md"
+printf '# Infra\n\nSelf-hosted no Hetzner.\n' > "$R/docs/context/INFRA.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-11: capítulo genérico sem comando passa (registry fechado)" '[ "$RC" -eq 0 ]'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

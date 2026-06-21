@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.1
+casa-version: 1.2
 casa-standard-ref: self
 ```
 
@@ -40,6 +40,12 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
   lista em bloco). Sintaxe fora disso é ERRO proposital, não silêncio — ver STANDARD §6.
 - O router (`AGENTS.md`) também é validado: metadados CASA, DoD global e ponteiros de
   contexto precisam estar íntegros.
+- A resolução de ponteiro varre o router INTEIRO: todo caminho de capítulo (docs/context
+  terminando em .md) citado entre crases vira ponteiro declarado e precisa existir — por
+  isso, em prosa, não envolva o caminho completo de um capítulo numa crase.
+- Capítulo RECONHECIDO declarado no Mapa de contexto (hoje só o `TESTS.md` em `docs/context/`)
+  dispara invariante de conteúdo: exige comando canônico. Registry fechado em
+  `RECOGNIZED_CHAPTERS`; estender = ADR no próprio repo (ADR-0008 / SPEC-0004).
 - Erro = `exit 1` por padrão. `--warn-only` sai 0 e existe só para a janela de adoção.
 - Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
   O check de frescor falha se o commitado divergir do gerado.

@@ -1,10 +1,10 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.1 · **Status:** accepted (2026-06-13) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.2 · **Status:** accepted (2026-06-20) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
-**Regra de promoção (cumprida em 2026-06-09):** o padrão só seria promovido depois que um repo-piloto passasse verde no `docs-check` — o console-platon passou (66 docs migrados, 0 erros) e o próprio `casa-standard` opera sob o padrão (ADRs 0001–0007, Specs 0001–0003, quatro validações no CI). O princípio permanece para toda mudança futura: um padrão desmentido pela própria referência ensina o agente a desconfiar de todas as suas garantias.
+**Regra de promoção (cumprida em 2026-06-09):** o padrão só seria promovido depois que um repo-piloto passasse verde no `docs-check` — o console-platon passou (66 docs migrados, 0 erros) e o próprio `casa-standard` opera sob o padrão (ADRs 0001–0008, Specs 0001–0004, quatro validações no CI). O princípio permanece para toda mudança futura: um padrão desmentido pela própria referência ensina o agente a desconfiar de todas as suas garantias.
 
 ---
 
@@ -65,7 +65,7 @@ O contexto operacional é organizado por **custo de contexto**, não por assunto
 
 **Camada 1 — Router (`/AGENTS.md`, carga sempre, teto de ~150 linhas).** Só o alto-ROI transversal: metadados CASA (`casa-repo-id`, `casa-tier`, `casa-version`, `casa-standard-ref`), contexto em 5 linhas, DoD global, comandos de validação/deploy, gotchas, e o **Mapa de contexto** — um índice dos capítulos onde cada entrada diz *quando carregar* ("mexeu em migration → leia `docs/context/INFRA.md`"). Estourou o teto, o conteúdo desce para um capítulo; o router fica com o ponteiro.
 
-**Camada 2 — Capítulos (`docs/context/*.md`, carga sob demanda).** Um assunto por arquivo (INFRA, TESTS, SECURITY, CONVENTIONS…). Conteúdo **imperativo e atemporal**: "rode X", "NUNCA use Y", "o estado atual é Z". É aqui que mora o ESTADO ATUAL — o que tira dos ADRs a pressão de serem emendados.
+**Camada 2 — Capítulos (`docs/context/*.md`, carga sob demanda).** Um assunto por arquivo (INFRA, TESTS, SECURITY, CONVENTIONS…). Conteúdo **imperativo e atemporal**: "rode X", "NUNCA use Y", "o estado atual é Z". É aqui que mora o ESTADO ATUAL — o que tira dos ADRs a pressão de serem emendados. Alguns capítulos são **reconhecidos** pelo `docs-check`: declarar o ponteiro no router dispara um invariante de conteúdo (hoje só `TESTS.md` — exige um comando canônico de teste; §8). O conjunto é **fechado** e versionado — capítulo reconhecido novo entra por ADR no `casa-standard` (ADR-0008), nunca por validação que o repo adotante traz consigo.
 
 **Camada 3 — AGENTS.md aninhado (`<subdir>/AGENTS.md`, lazy nativo).** Regras que só valem num pacote (ex.: `supabase/AGENTS.md`). O agente carrega só ao tocar o subtree (nearest-wins).
 
@@ -155,7 +155,7 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 
 `scripts/docs-check` roda no gate automatizado de todo repo T1 (§3 — CI ou pre-commit hook). **Erro = exit 1 por padrão**; `--warn-only` imprime tudo e sai 0, e existe só para a janela de adoção (§10).
 
-1. **Router íntegro**: `AGENTS.md` existe, declara `casa-repo-id`, `casa-tier`, `casa-version` e `casa-standard-ref` em bloco `yaml`, tem `## Como validar (DoD global do repo)` com ao menos uma linha executável, e os ponteiros `docs/context/*.md` do mapa resolvem. Acima de ~150 linhas sai como aviso (mova conteúdo para capítulo).
+1. **Router íntegro**: `AGENTS.md` existe, declara `casa-repo-id`, `casa-tier`, `casa-version` e `casa-standard-ref` em bloco `yaml`, tem `## Como validar (DoD global do repo)` com ao menos uma linha executável, e os ponteiros `docs/context/*.md` do mapa resolvem. Capítulo **reconhecido** declarado no mapa dispara, além da existência, um invariante de conteúdo — hoje `docs/context/TESTS.md` exige ao menos um comando canônico em bloco de código (registry fechado, §4; estender = ADR no `casa-standard`). Acima de ~150 linhas sai como aviso (mova conteúdo para capítulo).
 2. **Frontmatter válido**: sintaxe dentro do subconjunto suportado (§6 — linha não reconhecida é erro, nunca ignorada), campos obrigatórios (`status`, `date`), data de calendário real em `AAAA-MM-DD`, vocabulário de status por camada, e vocabulário fechado de campos — campo desconhecido sai como aviso (§6).
 3. **Derivação íntegra**: filename no padrão `NNNN-kebab.md`, H1 presente no corpo (após o frontmatter; comentário não conta), id único.
 4. **Grafo íntegro**: `builds-on`/`superseded-by` resolvem (referência cross-repo vira aviso); sem auto-supersessão; `superseded-by` só em ADR e apontando para ADR; ADR `superseded` tem o bloco `VERDADE ATUAL` real, fora de comentário.
@@ -214,6 +214,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `docs/templates/AGENTS.template.md` — router com mapa de contexto
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
+- `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)
 - `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
 - `scripts/test-docs-check` — cenários de regressão do validador (SPEC-0003)
 - `scripts/pre-commit` — gate local de referência para repo sem remote (§3)

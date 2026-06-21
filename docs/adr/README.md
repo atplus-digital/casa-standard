@@ -11,3 +11,4 @@
 | [ADR-0005](0005-distribuicao-curl-sh.md) | Distribuição do bootstrap é buscador fino via curl|sh no próprio repo | accepted |
 | [ADR-0006](0006-gate-por-host-do-remote.md) | Adaptador do gate é escolhido pelo host do remote — hook é o fallback universal | accepted |
 | [ADR-0007](0007-governanca-versionada-e-invariantes-do-core.md) | Governança versionada e invariantes mínimos entram no core do CASA | accepted |
+| [ADR-0008](0008-registry-fechado-de-capacidades-reconhecidas.md) | Capacidades reconhecidas: declaração no router dispara invariante de conteúdo (registry fechado) | accepted |

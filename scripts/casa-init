@@ -27,13 +27,14 @@ import argparse, filecmp, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
-CASA_VERSION = "1.1"
+CASA_VERSION = "1.2"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/pre-commit",
     "docs/templates/AGENTS.template.md",
     "docs/templates/adr.template.md",
     "docs/templates/spec.template.md",
+    "docs/templates/context.TESTS.template.md",
     "docs/templates/docs-check.workflow.yml",
 ]
 WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
@@ -146,7 +147,7 @@ def main():
         text = text.replace("<nome-canonico-do-repo>", repo_id)
         if args.tier == "T0":
             text = text.replace("casa-tier: T1", "casa-tier: T0", 1)
-        text = text.replace("casa-version: 1.1", f"casa-version: {CASA_VERSION}", 1)
+        text = text.replace("casa-version: 1.2", f"casa-version: {CASA_VERSION}", 1)
         text = text.replace("casa-standard-ref: <sha>", f"casa-standard-ref: {ref}", 1)
         # write_bytes (não write_text) preserva LF no Windows — write_text traduz \n→\r\n
         router.write_bytes(text.encode("utf-8"))
