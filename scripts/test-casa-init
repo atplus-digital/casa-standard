@@ -12,7 +12,7 @@ tree_hash() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cat | cksum); }
 A="$(mktemp -d)/novo"
 python3 "$INIT" "$A" --repo-id meu-app >/dev/null
 ck "EARS-1/11: router criado com repo-id"            'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
-ck "router criado com casa-version"                  'grep -q "casa-version: 1.1" "$A/AGENTS.md"'
+ck "router criado com casa-version"                  'grep -q "casa-version: 1.2" "$A/AGENTS.md"'
 ck "ref carimbado (placeholder substituído)"         'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
 ck "docs-check verde no destino recém-criado"        '(cd "$A" && python3 scripts/docs-check)'
 H1=$(tree_hash "$A"); python3 "$INIT" "$A" --repo-id meu-app >/dev/null; H2=$(tree_hash "$A")
@@ -33,7 +33,7 @@ casa-tier: T1
 conteúdo do repo
 EOF
 python3 "$INIT" "$BV" >/dev/null
-ck "router antigo recebe casa-version"               'grep -q "casa-version: 1.1" "$BV/AGENTS.md"'
+ck "router antigo recebe casa-version"               'grep -q "casa-version: 1.2" "$BV/AGENTS.md"'
 ck "router antigo recebe casa-standard-ref"          'grep -q "^casa-standard-ref: " "$BV/AGENTS.md"'
 ck "router antigo preserva conteúdo do repo"         'grep -q "conteúdo do repo" "$BV/AGENTS.md"'
 

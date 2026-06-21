@@ -18,10 +18,12 @@ ADRs:
 - 0005: usado (distribuição via `install.sh` curl|sh, 2026-06-09).
 - 0006: usado (gate por host do remote, 2026-06-12).
 - 0007: usado (governança versionada e invariantes do core, 2026-06-13).
-- Próximo livre: 0008 — registre aqui a reserva ao abrir o PR que o usa.
+- 0008: usado (registry fechado de capacidades reconhecidas, 2026-06-20).
+- Próximo livre: 0009 — registre aqui a reserva ao abrir o PR que o usa.
 
 Specs:
 - 0001: usado (`casa-init`, 2026-06-09).
 - 0002: usado (`install.sh`, 2026-06-09).
 - 0003: usado (`docs-check` invariantes core, 2026-06-13).
-- Próximo livre: 0004.
+- 0004: usado (capacidade TESTS reconhecida pelo `docs-check`, 2026-06-20).
+- Próximo livre: 0005.

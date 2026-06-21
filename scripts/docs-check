@@ -7,7 +7,8 @@ Uso:
   scripts/docs-check --check-adr-immutability --base-ref origin/main
 
 O que faz:
-  1. Valida o router AGENTS.md: metadados CASA, DoD global e ponteiros de contexto.
+  1. Valida o router AGENTS.md: metadados CASA, DoD global, ponteiros de contexto e o
+     invariante de capítulo RECONHECIDO (TESTS.md declarado exige comando canônico — §4/§8).
   2. Lê docs/adr/*.md e docs/specs/*.md.
   3. DERIVA id do filename (docs/adr/0032-x.md → ADR-0032) e title do primeiro
      H1 do corpo (após o frontmatter; comentários HTML não contam).
@@ -47,6 +48,13 @@ REQUIRED = {"status", "date"}
 KNOWN_KEYS = {"status", "date", "builds-on", "superseded-by", "implemented-by", "deciders"}
 ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-ref"}
 ROUTER_TIERS = {"T0", "T1"}
+# Capítulos de contexto RECONHECIDOS (registry FECHADO — STANDARD §4/§8): declarar o
+# ponteiro no router dispara um invariante de CONTEÚDO que mora aqui, no validador. O
+# gatilho é a DECLARAÇÃO no router, nunca a presença física do arquivo no disco; a regra
+# nunca é trazida pelo repo adotante. Estender o conjunto = ADR no casa-standard (ADR-0008).
+RECOGNIZED_CHAPTERS = {
+    "docs/context/TESTS.md": "TESTS",   # exige ao menos um comando canônico de teste
+}
 IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
                 "vendor", "__pycache__", ".next", "target", ".tox",
                 ".mypy_cache", ".pytest_cache", ".ruff_cache"}
@@ -162,6 +170,20 @@ def has_placeholder(text):
     return bool(PLACEHOLDER_RE.search(text or ""))
 
 
+def validate_recognized_chapter(root, ref_path, errors):
+    """Capítulo reconhecido declarado no router: aplica o invariante de conteúdo do registry
+    FECHADO (RECOGNIZED_CHAPTERS). Hoje só TESTS.md → exige um comando canônico, reusando o
+    mesmo critério do DoD global (executable_lines). A regra mora no validador, não no repo."""
+    label = RECOGNIZED_CHAPTERS.get(ref_path)
+    if label is None:
+        return
+    text = (root / ref_path).read_text(encoding="utf-8")
+    if not executable_lines(text):
+        errors.append(f"AGENTS.md: capítulo reconhecido {label} (`{ref_path}`) declarado no "
+                      "Mapa de contexto sem comando executável em bloco de código — liste o(s) "
+                      "comando(s) canônico(s) de teste ou remova o ponteiro (STANDARD §8)")
+
+
 def validate_router(root, errors, warnings):
     router = root / "AGENTS.md"
     if not router.exists():
@@ -211,6 +233,8 @@ def validate_router(root, errors, warnings):
     for ref_path in sorted(set(re.findall(r"`(docs/context/[^`]+\.md)`", text))):
         if not (root / ref_path).exists():
             errors.append(f"AGENTS.md: Mapa de contexto aponta para arquivo inexistente '{ref_path}'")
+        else:
+            validate_recognized_chapter(root, ref_path, errors)
 
 
 def render_readme(label, rows):

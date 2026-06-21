@@ -80,6 +80,19 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0008",
+    "path": "docs/adr/0008-registry-fechado-de-capacidades-reconhecidas.md",
+    "layer": "adr",
+    "title": "Capacidades reconhecidas: declaração no router dispara invariante de conteúdo (registry fechado)",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0003",
+      "ADR-0007"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -134,6 +147,24 @@
       ".github/workflows/docs-check.yml",
       "docs/templates/docs-check.workflow.yml",
       "docs/templates/AGENTS.template.md",
+      "STANDARD.md"
+    ]
+  },
+  {
+    "id": "SPEC-0004",
+    "path": "docs/specs/0004-capacidade-tests-reconhecida.md",
+    "layer": "specs",
+    "title": "docs-check reconhece o capítulo TESTS declarado no router e exige comando canônico",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0008"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-check",
+      "scripts/test-docs-check",
+      "docs/templates/context.TESTS.template.md",
+      "scripts/casa-init",
       "STANDARD.md"
     ]
   }
