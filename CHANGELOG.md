@@ -1,5 +1,16 @@
 # Changelog
 
+## CASA 1.7 — 2026-07-05
+
+- **UI tem endereço no método** (ADR-0014): decisão estrutural (design system, tokens,
+  estados obrigatórios) → ADR do repo, uma vez; comportamento visual da feature → casos de
+  borda EARS comuns na Spec, sob a regra de DoD do §7 (comandos reais do repo — nunca
+  exemplo fictício); estética → `## Revisão humana`. Sem quinto pilar, sem template novo.
+- **`design-ref` entra no vocabulário fechado central** (§6): escalar, URL ou path
+  relativo, **não-normativo** (código+snapshot ganham em divergência), exportado ao
+  `docs/index.json`, sem validação de forma. Bloco de orientação de UI no
+  `spec.template.md`.
+
 ## CASA 1.6 — 2026-07-05
 
 - **Novo `scripts/docs-reserve`** (ADR-0013, SPEC-0007): reserva o próximo `NNNN` e cria a

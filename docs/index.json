@@ -157,6 +157,19 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0014",
+    "path": "docs/adr/0014-onde-a-ui-mora-adr-de-sistema-estados-na-spec-design-ref-nao-normativo.md",
+    "layer": "adr",
+    "title": "Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0003",
+      "ADR-0012"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",

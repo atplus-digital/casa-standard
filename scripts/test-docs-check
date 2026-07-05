@@ -278,6 +278,45 @@ OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
 ck "SPEC-0006/6: docs/BACKLOG.md na raiz não gera aviso" \
    '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "ADR-0011"'
 
+# --- ADR-0014: design-ref no vocabulário central ---
+
+# design-ref é campo conhecido (sem aviso) e exportado ao index.json
+mkrepo
+mkdir -p "$R/docs/specs"
+cat > "$R/docs/specs/0001-ui.md" <<EOF
+---
+status: draft
+date: 2026-07-05
+builds-on: []
+design-ref: docs/design/mock.html
+---
+
+# Spec de UI
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "ADR-0014: design-ref não gera aviso de vocabulário" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "fora do vocabulário"'
+ck "ADR-0014: design-ref exportado ao index.json" \
+   'grep -q "design-ref" "$R/docs/index.json"'
+
+# controle: campo realmente desconhecido segue avisando
+mkrepo
+mkdir -p "$R/docs/specs"
+cat > "$R/docs/specs/0001-x.md" <<EOF
+---
+status: draft
+date: 2026-07-05
+campo-inventado: x
+---
+
+# Spec com campo estranho
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1)
+ck "ADR-0014: campo desconhecido continua avisando" \
+   'echo "$OUT" | grep -q "fora do vocabulário"'
+
 echo
 echo "==== $pass PASS / $fail FAIL ===="
 [ "$fail" -eq 0 ]

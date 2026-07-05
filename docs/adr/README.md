@@ -17,3 +17,4 @@
 | [ADR-0011](0011-aviso-de-backlog-em-docs-context.md) | docs-check aponta backlog em docs/context/ — aviso de localização | accepted |
 | [ADR-0012](0012-dod-exercita-casos-de-borda-e-incremento-divide-ou-corta.md) | DoD de Spec exercita os casos de borda; entrega incremental divide a spec ou corta o escopo | accepted |
 | [ADR-0013](0013-docs-reserve-e-formato-do-ledger-de-reservas.md) | docs-reserve automatiza a reserva de NNNN; o ledger ganha formato de tabela por seção | accepted |
+| [ADR-0014](0014-onde-a-ui-mora-adr-de-sistema-estados-na-spec-design-ref-nao-normativo.md) | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | accepted |

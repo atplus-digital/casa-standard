@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.6 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.7 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -110,6 +110,7 @@ Fluxo, contrato, casos de borda e DoD **antes** de implementar. Status: `draft �
 - **DoD executável obrigatório** (§7). Sem ele, não sai de `draft`.
 - **Fechamento:** na transição para `implemented`, no mesmo commit: `implemented-by` recebe os paths reais (código, migrations, functions); a seção `## Verificação` recebe a evidência do DoD (comandos rodados + resultado); gotchas descobertos vão para o `AGENTS.md`; estado atual novo vai para o capítulo de contexto pertinente. O `docs-check` valida o lado-Spec do fechamento (`implemented-by` preenchido, `## Verificação` sem placeholder); a propagação de gotchas→`AGENTS.md` e estado→capítulo **não** é mecanizável e fica na revisão humana do PR — é o ponto mais frágil do ciclo.
 - **Entrega incremental divide a spec — ou corta o escopo** (ADR-0012): cada incremento entregável vira uma spec com fechamento atômico próprio, ou o incremento sai do contrato (`## Fora do escopo` decidido + registro em backlog/tracker). Spec guarda-chuva meio-implementada — `implemented` com parcela pendente — não existe: "o que conta como pronto" nunca é interpretação. Ao dividir uma spec já aceita, a original vira `deprecated` (spec não usa `superseded-by`, §6) e as partes novas a citam em `builds-on`.
+- **Feature com UI** (ADR-0014): a decisão estrutural — design system, tokens, estados obrigatórios (loading/empty/error) — é ADR do repo, uma vez, herdado via `builds-on`; o comportamento visual da feature entra como casos de borda EARS comuns ("QUANDO a lista está vazia, o sistema DEVE exibir empty-state com CTA"), sob a mesma regra de DoD do §7 — com comandos **reais do repo** (regressão visual/a11y quando a toolchain existir; nunca comando de exemplo que o repo não tem). O link de design vai no campo `design-ref` (§6) — referência **não-normativa**: código+snapshot ganham em divergência, e conferir a estética é `## Revisão humana`, não gate.
 - Convenções compartilhadas entre specs moram em `docs/context/CONVENTIONS.md` (capítulo de leitura obrigatória, apontado pelo router) — não no README de specs.
 
 ---
@@ -130,7 +131,7 @@ implemented-by: []           # Specs: paths reais, preenchido no fechamento
 
 O frontmatter aceita só o subconjunto YAML do exemplo — escalar, lista inline e lista em bloco (`- item`). O `docs-check` **rejeita com erro** qualquer outra sintaxe em vez de ignorá-la em silêncio.
 
-O vocabulário de campos é **fechado**: `status`, `date`, `builds-on`, `superseded-by`, `implemented-by`, `deciders`. Campo fora dele sai como **aviso** — extensão é permitida, mas deliberada: registre o campo novo num ADR do repo ou remova-o. Campo fantasma (presente no arquivo, ausente do grafo) não fica.
+O vocabulário de campos é **fechado**: `status`, `date`, `builds-on`, `superseded-by`, `implemented-by`, `deciders`, `design-ref`. Campo fora dele sai como **aviso** — extensão é permitida, mas deliberada: registre o campo novo num ADR do repo ou remova-o. Campo fantasma (presente no arquivo, ausente do grafo) não fica. `design-ref` (escalar; URL ou path relativo) aponta a referência de design **não-normativa** de uma spec com UI — código e snapshot ganham dela em divergência (ADR-0014); o campo é exportado ao `docs/index.json` e não tem validação de forma.
 
 Os `README.md` das pastas de docs (tabela id/título/status) são **gerados** pelo `docs-check` — nunca editados à mão.
 
