@@ -1,5 +1,16 @@
 # Changelog
 
+## CASA 1.3 — 2026-07-05
+
+- O `casa-init` cria, quando ausente, a **ponte `CLAUDE.md`** (`@AGENTS.md`): o Claude Code
+  não lê `AGENTS.md`, e sem a ponte o router fica invisível para ele (ADR-0009, SPEC-0005).
+- `CLAUDE.md` existente é identidade do repo — nunca sobrescrito; sem `@AGENTS.md` no corpo,
+  o `casa-init` emite AVISO. Pontes por host formam conjunto **fechado** no `casa-init`
+  (hoje: só Claude Code); host novo entra por ADR.
+- Novo template distribuído: `docs/templates/CLAUDE.template.md`.
+- Mudança compatível; o `docs-check` não muda — a ponte não é validada pelo gate (contrato
+  agnóstico de host; restaurá-la é papel do `casa-init`).
+
 ## CASA 1.2 — 2026-06-20
 
 - Introduz **capítulos de contexto reconhecidos** (registry fechado): declarar o ponteiro

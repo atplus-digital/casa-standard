@@ -12,9 +12,10 @@ tree_hash() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cat | cksum); }
 A="$(mktemp -d)/novo"
 python3 "$INIT" "$A" --repo-id meu-app >/dev/null
 ck "EARS-1/11: router criado com repo-id"            'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
-ck "router criado com casa-version"                  'grep -q "casa-version: 1.2" "$A/AGENTS.md"'
+ck "router criado com casa-version"                  'grep -q "casa-version: 1.3" "$A/AGENTS.md"'
 ck "ref carimbado (placeholder substituído)"         'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
 ck "docs-check verde no destino recém-criado"        '(cd "$A" && python3 scripts/docs-check)'
+ck "SPEC-0005/1: ponte CLAUDE.md criada com @AGENTS.md" 'grep -q "^@AGENTS.md" "$A/CLAUDE.md"'
 H1=$(tree_hash "$A"); python3 "$INIT" "$A" --repo-id meu-app >/dev/null; H2=$(tree_hash "$A")
 ck "EARS-10: segunda execução não muda nenhum byte"  '[ "$H1" = "$H2" ]'
 
@@ -33,9 +34,20 @@ casa-tier: T1
 conteúdo do repo
 EOF
 python3 "$INIT" "$BV" >/dev/null
-ck "router antigo recebe casa-version"               'grep -q "casa-version: 1.2" "$BV/AGENTS.md"'
+ck "router antigo recebe casa-version"               'grep -q "casa-version: 1.3" "$BV/AGENTS.md"'
 ck "router antigo recebe casa-standard-ref"          'grep -q "^casa-standard-ref: " "$BV/AGENTS.md"'
 ck "router antigo preserva conteúdo do repo"         'grep -q "conteúdo do repo" "$BV/AGENTS.md"'
+
+# SPEC-0005/2,3 — ponte CLAUDE.md existente é identidade do repo
+CS="$(mktemp -d)/shim-ok"; mkdir -p "$CS"; printf '@AGENTS.md\nregras minhas\n' > "$CS/CLAUDE.md"
+OUT=$(python3 "$INIT" "$CS" 2>&1)
+ck "SPEC-0005/2: CLAUDE.md com @AGENTS.md intocado"  '[ "$(cat "$CS/CLAUDE.md")" = "@AGENTS.md
+regras minhas" ]'
+ck "SPEC-0005/2: e relatado em dia"                  'echo "$OUT" | grep -q "em dia.*CLAUDE.md"'
+CA="$(mktemp -d)/shim-alheio"; mkdir -p "$CA"; printf 'instrucoes custom\n' > "$CA/CLAUDE.md"
+OUT=$(python3 "$INIT" "$CA" 2>&1)
+ck "SPEC-0005/3: CLAUDE.md sem @AGENTS.md preservado" '[ "$(cat "$CA/CLAUDE.md")" = "instrucoes custom" ]'
+ck "SPEC-0005/3: e gera AVISO com a linha a adicionar" 'echo "$OUT" | grep -q "AVISO.*CLAUDE.md.*@AGENTS.md"'
 
 # EARS 4 — toolchain desatualizada é da ferramenta
 C="$(mktemp -d)/u"; python3 "$INIT" "$C" >/dev/null

@@ -13,7 +13,8 @@ Aditivo e idempotente:
   - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
     se ausente — com repo-id, tier, casa-version e casa-standard-ref carimbados; se
     existir, apenas casa-version e casa-standard-ref são atualizados/inseridos no
-    bloco yaml quando possível.
+    bloco yaml quando possível. CLAUDE.md (ponte de host, ADR-0009) é criado do
+    template só se ausente; existente nunca é tocado (AVISO se falta @AGENTS.md).
   - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente);
     sem remote ou host sem adaptador de CI → pre-commit hook, com AVISO
     quando há remote (hook alheio não é tocado); sem .git → orienta.
@@ -27,16 +28,20 @@ import argparse, filecmp, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
-CASA_VERSION = "1.2"
+CASA_VERSION = "1.3"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/pre-commit",
     "docs/templates/AGENTS.template.md",
+    "docs/templates/CLAUDE.template.md",
     "docs/templates/adr.template.md",
     "docs/templates/spec.template.md",
     "docs/templates/context.TESTS.template.md",
     "docs/templates/docs-check.workflow.yml",
 ]
+# Pontes por host (ADR-0009) — conjunto FECHADO: host de agente que não lê AGENTS.md
+# recebe um arquivo-ponte que importa o router. Host novo entra por ADR, nunca ad-hoc.
+HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
 WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
 WORKFLOW_DEST = ".github/workflows/docs-check.yml"
 
@@ -147,7 +152,7 @@ def main():
         text = text.replace("<nome-canonico-do-repo>", repo_id)
         if args.tier == "T0":
             text = text.replace("casa-tier: T1", "casa-tier: T0", 1)
-        text = text.replace("casa-version: 1.2", f"casa-version: {CASA_VERSION}", 1)
+        text = re.sub(r"casa-version: \S+", f"casa-version: {CASA_VERSION}", text, count=1)
         text = text.replace("casa-standard-ref: <sha>", f"casa-standard-ref: {ref}", 1)
         # write_bytes (não write_text) preserva LF no Windows — write_text traduz \n→\r\n
         router.write_bytes(text.encode("utf-8"))
@@ -160,6 +165,20 @@ def main():
             say("atualizado", f"AGENTS.md: casa-version → {CASA_VERSION}; casa-standard-ref → {ref}")
         else:
             say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
+
+    # 2b. Ponte de host (ADR-0009): Claude Code não lê AGENTS.md — CLAUDE.md importa o
+    # router. Criada só se ausente; existente é identidade do repo, nunca tocada.
+    shim_name, shim_tpl, shim_marker = HOST_SHIM
+    shim = target / shim_name
+    if not shim.exists():
+        text = (SRC / shim_tpl).read_text(encoding="utf-8")
+        shim.write_bytes(text.encode("utf-8"))  # preserva LF no Windows (ver acima)
+        say("criado", f"{shim_name} (ponte → AGENTS.md, ADR-0009)")
+    elif shim_marker in shim.read_text(encoding="utf-8"):
+        say("em dia", f"{shim_name} (ponte → AGENTS.md)")
+    else:
+        say("AVISO", f"{shim_name} existe sem `{shim_marker}` — o Claude Code não carrega "
+                     f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
 
     # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
     r = sh(["git", "-C", str(target), "rev-parse", "--git-dir"])
