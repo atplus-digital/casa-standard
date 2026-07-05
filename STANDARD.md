@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.2 · **Status:** accepted (2026-06-20) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.3 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -22,6 +22,7 @@ Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenh
 
 ```
 AGENTS.md                  # ROUTER: alto-ROI transversal + mapa de contexto (§4)
+CLAUDE.md                  # ponte de host: importa o router para o Claude Code (ADR-0009)
 docs/
   context/                 # capítulos de ESTADO ATUAL, carga sob demanda (§4)
     INFRA.md  TESTS.md  CONVENTIONS.md  ...   # um assunto por arquivo
@@ -63,7 +64,7 @@ Nada disparou? Não escreve nada. Documento sem gatilho é ruído.
 
 O contexto operacional é organizado por **custo de contexto**, não por assunto solto:
 
-**Camada 1 — Router (`/AGENTS.md`, carga sempre, teto de ~150 linhas).** Só o alto-ROI transversal: metadados CASA (`casa-repo-id`, `casa-tier`, `casa-version`, `casa-standard-ref`), contexto em 5 linhas, DoD global, comandos de validação/deploy, gotchas, e o **Mapa de contexto** — um índice dos capítulos onde cada entrada diz *quando carregar* ("mexeu em migration → leia `docs/context/INFRA.md`"). Estourou o teto, o conteúdo desce para um capítulo; o router fica com o ponteiro.
+**Camada 1 — Router (`/AGENTS.md`, carga sempre, teto de ~150 linhas).** Só o alto-ROI transversal: metadados CASA (`casa-repo-id`, `casa-tier`, `casa-version`, `casa-standard-ref`), contexto em 5 linhas, DoD global, comandos de validação/deploy, gotchas, e o **Mapa de contexto** — um índice dos capítulos onde cada entrada diz *quando carregar* ("mexeu em migration → leia `docs/context/INFRA.md`"). Estourou o teto, o conteúdo desce para um capítulo; o router fica com o ponteiro. Host de agente que não lê `AGENTS.md` (hoje: Claude Code) acessa o router pela **ponte** `CLAUDE.md` — arquivo mínimo com `@AGENTS.md` que o `casa-init` cria quando ausente e nunca sobrescreve (ADR-0009); instrução específica desse host entra na ponte, abaixo do import, nunca duplicando o router.
 
 **Camada 2 — Capítulos (`docs/context/*.md`, carga sob demanda).** Um assunto por arquivo (INFRA, TESTS, SECURITY, CONVENTIONS…). Conteúdo **imperativo e atemporal**: "rode X", "NUNCA use Y", "o estado atual é Z". É aqui que mora o ESTADO ATUAL — o que tira dos ADRs a pressão de serem emendados. Alguns capítulos são **reconhecidos** pelo `docs-check`: declarar o ponteiro no router dispara um invariante de conteúdo (hoje só `TESTS.md` — exige um comando canônico de teste; §8). O conjunto é **fechado** e versionado — capítulo reconhecido novo entra por ADR no `casa-standard` (ADR-0008), nunca por validação que o repo adotante traz consigo.
 
@@ -71,7 +72,7 @@ O contexto operacional é organizado por **custo de contexto**, não por assunto
 
 Duas regras que sustentam o modelo:
 
-- **Fato técnico (load-bearing; semântica verificada no Claude Code — nos demais agentes, trate o lazy-loading do aninhamento como melhor esforço até verificar):** `@import` inline **não** economiza contexto — expande tudo no launch. Só AGENTS.md aninhado abaixo do CWD é lazy de verdade. Portanto: **proibido** colar capítulo grande via `@import` no router; composição pesada = ponteiro + leitura sob demanda + aninhamento.
+- **Fato técnico (load-bearing; semântica verificada no Claude Code — nos demais agentes, trate o lazy-loading do aninhamento como melhor esforço até verificar):** `@import` inline **não** economiza contexto — expande tudo no launch. Só AGENTS.md aninhado abaixo do CWD é lazy de verdade. Portanto: **proibido** colar capítulo grande via `@import` no router; composição pesada = ponteiro + leitura sob demanda + aninhamento. (A ponte `CLAUDE.md` é a exceção deliberada: importa o router inteiro de propósito, porque router é carga-sempre — ADR-0009.)
 - **Fronteira anti-duplicação:** capítulo = imperativo/atemporal; ADR/Spec = decisão/comportamento datado e versionado. Onde sobrepõe, o capítulo aponta ("modelo de integração: ver ADR-0032") — nunca copia o corpo.
 
 ---
@@ -189,7 +190,7 @@ janela explícita para repos adotantes. O mantenedor do padrão é `atplus-digit
 mudança no padrão é PR com conversa e, quando altera comportamento do `docs-check`, atualiza
 esta seção, a §8 e a implementação no mesmo PR.
 
-**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente) e o gate do §3 em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `CASA_REF=<tag|sha>`). Projeto **novo** termina aqui: nasce verde.
+**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente), a ponte `CLAUDE.md` (se ausente; ADR-0009) e o gate do §3 em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `CASA_REF=<tag|sha>`). Projeto **novo** termina aqui: nasce verde.
 
 Repo **existente**: o `casa-init` instala a base e o `docs-check` relata o que falta; a migração de **conteúdo** exige julgamento e segue incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) preencher o `AGENTS.md` router (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente (o gate em si — CI ou hook — o `casa-init` já instalou).
 
@@ -212,6 +213,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 ## Anexos deste pacote
 
 - `docs/templates/AGENTS.template.md` — router com mapa de contexto
+- `docs/templates/CLAUDE.template.md` — ponte de host para o Claude Code (§4; ADR-0009)
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)

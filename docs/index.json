@@ -93,6 +93,19 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0009",
+    "path": "docs/adr/0009-ponte-claude-md-para-hosts-sem-agents-md.md",
+    "layer": "adr",
+    "title": "Ponte CLAUDE.md: host que não lê AGENTS.md recebe um arquivo de importação, criado pelo casa-init",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0004",
+      "ADR-0008"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -166,6 +179,24 @@
       "docs/templates/context.TESTS.template.md",
       "scripts/casa-init",
       "STANDARD.md"
+    ]
+  },
+  {
+    "id": "SPEC-0005",
+    "path": "docs/specs/0005-ponte-claude-md-no-bootstrap.md",
+    "layer": "specs",
+    "title": "casa-init garante a ponte CLAUDE.md para o router em todo repo adotante",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0009",
+      "ADR-0004"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/casa-init",
+      "scripts/test-casa-init",
+      "docs/templates/CLAUDE.template.md",
+      "CLAUDE.md"
     ]
   }
 ]
