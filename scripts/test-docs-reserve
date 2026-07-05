@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0007 (docs-reserve). DoD: exit 0 = todos verdes.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+RESERVE="$ROOT/scripts/docs-reserve"
+INIT="$ROOT/scripts/casa-init"
+TODAY="$(date +%F)"
+pass=0; fail=0
+ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+
+mkr() { R="$(mktemp -d)/r"; python3 "$INIT" "$R" --repo-id t >/dev/null; }
+
+# SPEC-0007/1 — primeira reserva em repo novo: 0001, arquivo do template, ledger criado
+mkr
+OUT=$(python3 "$RESERVE" adr "Decisão sobre autenticação" --root "$R" 2>&1)
+ck "SPEC-0007/1: reserva ADR-0001"                'echo "$OUT" | grep -q "Reserved ADR-0001"'
+ck "SPEC-0007/1: arquivo criado com slug ASCII"   '[ -f "$R/docs/adr/0001-decisao-sobre-autenticacao.md" ]'
+ck "SPEC-0007/1: H1 recebe o título"              'grep -q "^# Decisão sobre autenticação$" "$R/docs/adr/0001-decisao-sobre-autenticacao.md"'
+ck "SPEC-0007/1: date é a de hoje"                'grep -q "^date: $TODAY" "$R/docs/adr/0001-decisao-sobre-autenticacao.md"'
+ck "SPEC-0007/1: ledger criado com a row"         'grep -qF "| 0001 | Decisão sobre autenticação | $TODAY | em uso |" "$R/docs/BACKLOG.md"'
+
+# SPEC-0007/2 — camadas numeram independente; sequência avança
+OUT=$(python3 "$RESERVE" spec "Caixa de entrada" --root "$R" 2>&1)
+ck "SPEC-0007/2: primeira Spec é SPEC-0001"       'echo "$OUT" | grep -q "Reserved SPEC-0001"'
+OUT=$(python3 "$RESERVE" adr "Outra decisão" --root "$R" 2>&1)
+ck "SPEC-0007/2: próximo ADR é 0002"              'echo "$OUT" | grep -q "Reserved ADR-0002"'
+
+# SPEC-0007/3 — reserva manual na tabela acima do max de arquivos é respeitada
+mkr
+mkdir -p "$R/docs"
+cat > "$R/docs/BACKLOG.md" <<EOF
+# Backlog — t
+
+## Reservas ADR
+
+| NNNN | título | data | situação |
+|---|---|---|---|
+| 0007 | reserva manual de outra branch | 2026-01-01 | reservado |
+EOF
+OUT=$(python3 "$RESERVE" adr "Nova decisão" --root "$R" 2>&1)
+ck "SPEC-0007/3: respeita reserva manual (0008)"  'echo "$OUT" | grep -q "Reserved ADR-0008"'
+ck "SPEC-0007/3: lacunas são anotadas"            'echo "$OUT" | grep -q "lacuna"'
+
+# SPEC-0007/3b — formato de campo com prefixo (ADR-0001) também é lido
+mkr
+mkdir -p "$R/docs"
+cat > "$R/docs/BACKLOG.md" <<EOF
+# Backlog — t
+
+## Reservas ADR
+
+| ID | Arquivo | Status |
+|---|---|---|
+| ADR-0004 | 0004-x.md | em uso |
+EOF
+OUT=$(python3 "$RESERVE" adr "Compat" --root "$R" 2>&1)
+ck "SPEC-0007/3b: row com prefixo ADR- conta"     'echo "$OUT" | grep -q "Reserved ADR-0005"'
+
+# SPEC-0007/4 — linha ilegível na seção: AVISO explícito, operação continua
+mkr
+mkdir -p "$R/docs"
+cat > "$R/docs/BACKLOG.md" <<EOF
+# Backlog — t
+
+## Reservas ADR
+
+| NNNN | título | data | situação |
+|---|---|---|---|
+| 0002 | ok | 2026-01-01 | em uso |
+0005-0009: reservados para a fase 2 (prosa antiga)
+EOF
+OUT=$(python3 "$RESERVE" adr "Segue o jogo" --root "$R" 2>&1)
+ck "SPEC-0007/4: linha ilegível gera AVISO"       'echo "$OUT" | grep -q "AVISO.*ilegível"'
+ck "SPEC-0007/4: operação continua (0003)"        'echo "$OUT" | grep -q "Reserved ADR-0003"'
+
+# SPEC-0007/5 — backlog em docs/context/ sem docs/BACKLOG.md: recusa, nada escrito
+mkr
+mkdir -p "$R/docs/context"; printf '# Backlog\n' > "$R/docs/context/BACKLOG.md"
+OUT=$(python3 "$RESERVE" adr "Não deve criar" --root "$R" 2>&1); RC=$?
+ck "SPEC-0007/5: recusa com backlog no lugar errado" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "ADR-0011"'
+ck "SPEC-0007/5: nada foi criado"                 '[ ! -d "$R/docs/adr" ] && [ ! -f "$R/docs/BACKLOG.md" ]'
+
+# SPEC-0007/6 — acentos e pontuação transliteram para slug ASCII kebab
+mkr
+python3 "$RESERVE" spec "Notificações por e-mail: envio & retry" --root "$R" >/dev/null 2>&1
+ck "SPEC-0007/6: slug translitera acentos"        '[ -f "$R/docs/specs/0001-notificacoes-por-e-mail-envio-retry.md" ]'
+
+# SPEC-0007/7 — dry-run anuncia e não escreve nada
+mkr
+OUT=$(python3 "$RESERVE" adr "Só ensaio" --root "$R" --dry-run 2>&1)
+ck "SPEC-0007/7: dry-run anuncia o número"        'echo "$OUT" | grep -q "0001"'
+ck "SPEC-0007/7: dry-run não cria arquivo"        '[ ! -d "$R/docs/adr" ] && [ ! -f "$R/docs/BACKLOG.md" ]'
+
+# SPEC-0007/8 — título sem caracteres aproveitáveis falha claro
+mkr
+ck "SPEC-0007/8: título sem slug falha"           '! python3 "$RESERVE" adr "!!!" --root "$R"'
+
+# SPEC-0007/9 — repo segue verde após a reserva (emit-index automático)
+mkr
+python3 "$RESERVE" adr "Primeira decisão" --root "$R" >/dev/null 2>&1
+python3 "$RESERVE" spec "Primeiro comportamento" --root "$R" >/dev/null 2>&1
+ck "SPEC-0007/9: docs-check verde após reservas"  '(cd "$R" && python3 scripts/docs-check)'
+
+echo
+echo "==== $pass PASS / $fail FAIL ===="
+[ "$fail" -eq 0 ]

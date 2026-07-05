@@ -10,3 +10,4 @@
 | [SPEC-0004](0004-capacidade-tests-reconhecida.md) | docs-check reconhece o capítulo TESTS declarado no router e exige comando canônico | implemented |
 | [SPEC-0005](0005-ponte-claude-md-no-bootstrap.md) | casa-init garante a ponte CLAUDE.md para o router em todo repo adotante | implemented |
 | [SPEC-0006](0006-sinalizacao-de-manutencao-no-docs-check.md) | docs-check sinaliza manutenção: coerência de versão de contrato e localização do backlog | implemented |
+| [SPEC-0007](0007-docs-reserve.md) | docs-reserve reserva o próximo NNNN e cria o documento do template | implemented |

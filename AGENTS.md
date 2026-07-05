@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.5
+casa-version: 1.6
 casa-standard-ref: self
 ```
 
@@ -24,6 +24,7 @@ Não há aplicação para rodar — o "produto" é a doc + o script.
 python3 scripts/docs-check          # exit 0; mesmo comando do CI
 bash scripts/test-docs-check        # exit 0; cenários do validador (SPEC-0003)
 scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
+scripts/test-docs-reserve           # exit 0; cenários da reserva (SPEC-0007)
 scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
 ```
 
@@ -67,6 +68,6 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
 - Versões do contrato CASA: `CHANGELOG.md`
 - Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
-- Pendências e reservas de NNNN: `docs/BACKLOG.md` (reserve lá antes de criar ADR/Spec novo)
+- Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título"` (ADR-0013)
 - Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`

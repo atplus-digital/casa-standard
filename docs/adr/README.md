@@ -16,3 +16,4 @@
 | [ADR-0010](0010-casa-version-e-promessa-do-repo.md) | casa-version é promessa do repo: o casa-init não a carimba; o docs-check sinaliza incoerência | accepted |
 | [ADR-0011](0011-aviso-de-backlog-em-docs-context.md) | docs-check aponta backlog em docs/context/ — aviso de localização | accepted |
 | [ADR-0012](0012-dod-exercita-casos-de-borda-e-incremento-divide-ou-corta.md) | DoD de Spec exercita os casos de borda; entrega incremental divide a spec ou corta o escopo | accepted |
+| [ADR-0013](0013-docs-reserve-e-formato-do-ledger-de-reservas.md) | docs-reserve automatiza a reserva de NNNN; o ledger ganha formato de tabela por seção | accepted |
