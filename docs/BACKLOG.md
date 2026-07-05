@@ -22,7 +22,8 @@ ADRs:
 - 0009: usado (ponte CLAUDE.md para hosts sem AGENTS.md, 2026-07-05).
 - 0010: usado (casa-version é promessa do repo, 2026-07-05).
 - 0011: usado (aviso de backlog em docs/context/, 2026-07-05).
-- Próximo livre: 0012 — registre aqui a reserva ao abrir o PR que o usa.
+- 0012: usado (DoD exercita casos de borda; incremento divide ou corta, 2026-07-05).
+- Próximo livre: 0013 — registre aqui a reserva ao abrir o PR que o usa.
 
 Specs:
 - 0001: usado (`casa-init`, 2026-06-09).

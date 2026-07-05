@@ -39,11 +39,15 @@ implemented-by: []          # paths reais (código, migrations, functions) — p
 
 ## Definition of Done
 <!-- OBRIGATÓRIO antes de sair de draft. Comandos com critério binário,
-     executáveis no ambiente do AGENTS.md. -->
+     executáveis no ambiente do AGENTS.md.
+     Fecha o loop DESTA spec (§7, ADR-0012): cada caso de borda enumerado acima
+     precisa de linha aqui — ou teste referenciado — que o exercite; cite os
+     números dos casos no comentário. DoD só com comandos genéricos do repo
+     (subconjunto do DoD global do router) é sinal de spec sem fechamento próprio. -->
 
 ```bash
 npm run typecheck                 # exit 0
-npm test -- --run <escopo>        # N/N verdes
+npm test -- --run <escopo>        # N/N verdes — casos <nºs da tabela acima>
 ```
 
 ## Revisão humana

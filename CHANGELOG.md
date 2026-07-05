@@ -1,5 +1,17 @@
 # Changelog
 
+## CASA 1.5 — 2026-07-05
+
+- **§7: o DoD fecha o loop da spec, não só o do repo** (ADR-0012): cada caso de borda
+  enumerado exige linha de DoD ou teste que o exercite (números citados no comentário);
+  DoD subconjunto do DoD global é sinal de spec sem fechamento próprio. Verificação humana
+  do PR — a heurística mecânica foi avaliada e rejeitada por falso-positivo no
+  repo-referência (registrada como extensão futura na issue #16).
+- **§5.2: entrega incremental divide a spec ou corta o escopo** (ADR-0012): spec
+  guarda-chuva meio-implementada não existe; ao dividir, a original vira `deprecated`.
+- Aplicabilidade: specs novas e tocadas. Doc-only — o `docs-check` não muda (só o bump de
+  `CONTRACT_VERSION`/`CASA_VERSION`).
+
 ## CASA 1.4 — 2026-07-05
 
 - **`casa-version` é promessa do repo** (ADR-0010): o `casa-init` deixa de re-carimbá-la em
