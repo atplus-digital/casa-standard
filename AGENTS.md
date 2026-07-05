@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.6
+casa-version: 1.7
 casa-standard-ref: self
 ```
 
@@ -54,6 +54,9 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - O script é executável sem extensão (`scripts/docs-check`); o CI o invoca via `python3`.
 - `install.sh`: o corpo vive em `main()`, chamada na ÚLTIMA linha — proteção contra
   download truncado (SPEC-0002). Nunca adicione código depois dessa linha.
+- Script novo em `scripts/` precisa do bit de execução NO ÍNDICE do git:
+  `git update-index --chmod=+x scripts/<nome>`. No Windows `core.filemode=false` —
+  `chmod` do filesystem não chega ao índice, e o CI invoca sem `bash` (exit 126).
 
 ## Mapa de contexto
 

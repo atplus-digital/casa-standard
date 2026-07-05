@@ -47,12 +47,13 @@ STATUS_VOCAB = {
     "specs": {"draft", "accepted", "implemented", "deprecated"},
 }
 REQUIRED = {"status", "date"}
-KNOWN_KEYS = {"status", "date", "builds-on", "superseded-by", "implemented-by", "deciders"}
+KNOWN_KEYS = {"status", "date", "builds-on", "superseded-by", "implemented-by", "deciders",
+              "design-ref"}  # design-ref: referência de design NÃO-normativa (ADR-0014)
 ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-ref"}
 ROUTER_TIERS = {"T0", "T1"}
 # Versão do contrato CASA que ESTA toolchain implementa (ADR-0010). Deve ser idêntica à
 # CASA_VERSION do casa-init do mesmo snapshot — o test-casa-init guarda a sincronia.
-CONTRACT_VERSION = "1.6"
+CONTRACT_VERSION = "1.7"
 # Capítulos de contexto RECONHECIDOS (registry FECHADO — STANDARD §4/§8): declarar o
 # ponteiro no router dispara um invariante de CONTEÚDO que mora aqui, no validador. O
 # gatilho é a DECLARAÇÃO no router, nunca a presença física do arquivo no disco; a regra
@@ -403,6 +404,9 @@ def main():
                          "superseded-by": fm.get("superseded-by"),
                          "implemented-by": ib if isinstance(ib, list) else [ib],
                          "_visible": visible}
+            if fm.get("design-ref"):
+                # exportado ao índice: campo conhecido presente no grafo, não fantasma (ADR-0014)
+                docs[did]["design-ref"] = fm.get("design-ref")
 
     # Grafo e regras por camada
     for d in docs.values():

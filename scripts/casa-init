@@ -30,7 +30,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.6"
+CASA_VERSION = "1.7"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
