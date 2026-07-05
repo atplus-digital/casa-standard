@@ -9,3 +9,4 @@
 | [SPEC-0003](0003-docs-check-invariantes-core.md) | docs-check valida os invariantes mínimos do contrato CASA 1.1 | implemented |
 | [SPEC-0004](0004-capacidade-tests-reconhecida.md) | docs-check reconhece o capítulo TESTS declarado no router e exige comando canônico | implemented |
 | [SPEC-0005](0005-ponte-claude-md-no-bootstrap.md) | casa-init garante a ponte CLAUDE.md para o router em todo repo adotante | implemented |
+| [SPEC-0006](0006-sinalizacao-de-manutencao-no-docs-check.md) | docs-check sinaliza manutenção: coerência de versão de contrato e localização do backlog | implemented |

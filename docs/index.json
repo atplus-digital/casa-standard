@@ -106,6 +106,31 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0010",
+    "path": "docs/adr/0010-casa-version-e-promessa-do-repo.md",
+    "layer": "adr",
+    "title": "casa-version é promessa do repo: o casa-init não a carimba; o docs-check sinaliza incoerência",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0007",
+      "ADR-0004"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
+    "id": "ADR-0011",
+    "path": "docs/adr/0011-aviso-de-backlog-em-docs-context.md",
+    "layer": "adr",
+    "title": "docs-check aponta backlog em docs/context/ — aviso de localização",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0002"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -114,7 +139,8 @@
     "builds-on": [
       "ADR-0004",
       "ADR-0001",
-      "ADR-0006"
+      "ADR-0006",
+      "ADR-0010"
     ],
     "superseded-by": null,
     "implemented-by": [
@@ -197,6 +223,22 @@
       "scripts/test-casa-init",
       "docs/templates/CLAUDE.template.md",
       "CLAUDE.md"
+    ]
+  },
+  {
+    "id": "SPEC-0006",
+    "path": "docs/specs/0006-sinalizacao-de-manutencao-no-docs-check.md",
+    "layer": "specs",
+    "title": "docs-check sinaliza manutenção: coerência de versão de contrato e localização do backlog",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0010",
+      "ADR-0011"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-check",
+      "scripts/test-docs-check"
     ]
   }
 ]

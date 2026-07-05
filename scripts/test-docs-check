@@ -4,8 +4,15 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
 INIT="$ROOT/scripts/casa-init"
+# Versão de contrato derivada da constante do validador (nunca hardcodada no fixture).
+DC_V="$(sed -n 's/^CONTRACT_VERSION = "\(.*\)"$/\1/p' "$CHECK")"
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+
+set_version() { # troca o casa-version do router do fixture atual
+    sed "s/^casa-version: .*/casa-version: $1/" "$R/AGENTS.md" > "$R/AGENTS.tmp" \
+        && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+}
 
 mkrepo() {
     R="$(mktemp -d)"
@@ -16,7 +23,7 @@ mkrepo() {
 ```yaml
 casa-repo-id: teste
 casa-tier: T1
-casa-version: 1.2
+casa-version: 0.0
 casa-standard-ref: test
 ```
 
@@ -32,6 +39,7 @@ python3 scripts/docs-check
 |---|---|
 | (nenhum ainda) | — |
 EOF
+    set_version "$DC_V"
 }
 
 spec_doc() {
@@ -216,6 +224,59 @@ decl_tests "docs/context/INFRA.md"
 printf '# Infra\n\nSelf-hosted no Hetzner.\n' > "$R/docs/context/INFRA.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
 ck "EARS-11: capítulo genérico sem comando passa (registry fechado)" '[ "$RC" -eq 0 ]'
+
+# --- SPEC-0006: sinalização de manutenção (ADR-0010, ADR-0011) ---
+
+# SPEC-0006/1 — contrato declarado menor que a toolchain → aviso, exit 0
+mkrepo
+set_version "0.9"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/1: casa-version menor gera aviso e passa" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*atrás da toolchain"'
+
+# SPEC-0006/2 — contrato declarado maior que a toolchain → aviso de toolchain atrás
+mkrepo
+set_version "99.9"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/2: casa-version maior avisa toolchain atrás" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*rode scripts/casa-init"'
+
+# SPEC-0006/3 — versões iguais → nenhum aviso ADR-0010
+mkrepo
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/3: versões iguais não geram aviso" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "ADR-0010"'
+
+# SPEC-0006/4 — casa-version malformado: só o erro de formato, sem aviso por cima
+mkrepo
+set_version "banana"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/4: versão malformada só gera o erro de formato" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "semver simples" && ! echo "$OUT" | grep -q "ADR-0010"'
+
+# SPEC-0006/5 — backlog em docs/context/ → aviso de localização, exit 0
+mkrepo
+mkdir -p "$R/docs/context"
+printf '# Backlog\n\n- pendência\n' > "$R/docs/context/BACKLOG.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/5: BACKLOG.md em docs/context/ gera aviso" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*mova para docs/BACKLOG.md"'
+
+# SPEC-0006/5b — variação de case também é apontada (listagem, não exists())
+mkrepo
+mkdir -p "$R/docs/context"
+printf '# Backlog\n' > "$R/docs/context/backlog.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/5b: backlog.md (case variante) gera aviso" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*mova para docs/BACKLOG.md"'
+
+# SPEC-0006/6 — docs/BACKLOG.md na raiz de docs é o lugar certo: silêncio
+mkrepo
+mkdir -p "$R/docs"
+printf '# Backlog\n\n- pendência\n' > "$R/docs/BACKLOG.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0006/6: docs/BACKLOG.md na raiz não gera aviso" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "ADR-0011"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="
