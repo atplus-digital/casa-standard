@@ -143,6 +143,20 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0013",
+    "path": "docs/adr/0013-docs-reserve-e-formato-do-ledger-de-reservas.md",
+    "layer": "adr",
+    "title": "docs-reserve automatiza a reserva de NNNN; o ledger ganha formato de tabela por seção",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0002",
+      "ADR-0011",
+      "ADR-0003"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -251,6 +265,24 @@
     "implemented-by": [
       "scripts/docs-check",
       "scripts/test-docs-check"
+    ]
+  },
+  {
+    "id": "SPEC-0007",
+    "path": "docs/specs/0007-docs-reserve.md",
+    "layer": "specs",
+    "title": "docs-reserve reserva o próximo NNNN e cria o documento do template",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0013",
+      "ADR-0002",
+      "ADR-0011"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-reserve",
+      "scripts/test-docs-reserve",
+      "scripts/casa-init"
     ]
   }
 ]

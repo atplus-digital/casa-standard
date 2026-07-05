@@ -30,9 +30,10 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.5"
+CASA_VERSION = "1.6"
 TOOLCHAIN = [
     "scripts/docs-check",
+    "scripts/docs-reserve",
     "scripts/pre-commit",
     "docs/templates/AGENTS.template.md",
     "docs/templates/CLAUDE.template.md",
@@ -147,7 +148,7 @@ def main():
             say("atualizado", rel)
         else:
             say("em dia", rel)
-    for rel in ("scripts/docs-check", "scripts/pre-commit"):
+    for rel in ("scripts/docs-check", "scripts/docs-reserve", "scripts/pre-commit"):
         (target / rel).chmod(0o755)
 
     # 2. Identidade — propriedade do repo (só a linha casa-standard-ref é da ferramenta)

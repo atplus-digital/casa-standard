@@ -1,5 +1,19 @@
 # Changelog
 
+## CASA 1.6 — 2026-07-05
+
+- **Novo `scripts/docs-reserve`** (ADR-0013, SPEC-0007): reserva o próximo `NNNN` e cria a
+  ADR/Spec do template (data de hoje, H1 = título, slug ASCII), registrando a reserva no
+  ledger. Distribuído pela toolchain do `casa-init`.
+- O ledger (`docs/BACKLOG.md`) ganha formato de tabela por seção (`## Reservas ADR` /
+  `## Reservas Spec`, `| NNNN | título | data | situação |`) — o formato que os adotantes
+  já praticavam; primeira célula com prefixo (`ADR-NNNN`) também é aceita. Linha ilegível
+  na seção é **apontada**, nunca lida em silêncio. A linha "Próximo livre" morre.
+- O comando recusa operar com backlog em `docs/context/` (ADR-0011) — não cria segundo
+  ledger — e não coordena worktrees paralelas (escopo honesto: a proteção é o conflito
+  textual da tabela no merge).
+- `CONTRIBUTING.md` e §5 recomendam o comando; reserva manual continua válida.
+
 ## CASA 1.5 — 2026-07-05
 
 - **§7: o DoD fecha o loop da spec, não só o do repo** (ADR-0012): cada caso de borda

@@ -21,5 +21,7 @@ jobs:
         run: bash scripts/test-docs-check
       - name: Testar bootstrap casa-init (SPEC-0001)
         run: scripts/test-casa-init
+      - name: Testar reserva docs-reserve (SPEC-0007)
+        run: scripts/test-docs-reserve
       - name: Testar instalador curl|sh (SPEC-0002)
         run: scripts/test-install

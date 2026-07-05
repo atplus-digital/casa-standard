@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.5 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.6 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -83,7 +83,7 @@ Duas regras que sustentam o modelo:
 ADR (decisão, o porquê)  →  Spec (comportamento, o quê)  →  código + CI (a entrega)
 ```
 
-Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/NNNN-titulo-kebab.md`; numeração **local por repo e por camada**. Reserve o próximo `NNNN` no PR que cria o doc e registre a reserva em `docs/BACKLOG.md` — é o ledger que evita dois PRs paralelos alocando o mesmo número (o `docs-check` rejeita id duplicado, mas só pós-merge; renumerar depois cascateia nos `builds-on`). Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
+Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/NNNN-titulo-kebab.md`; numeração **local por repo e por camada**. Reserve o próximo `NNNN` no PR que cria o doc: `scripts/docs-reserve adr|spec "título"` calcula o número (arquivos + ledger), cria o doc do template e registra a reserva na tabela de `docs/BACKLOG.md` (ADR-0013) — é o ledger que evita dois PRs paralelos alocando o mesmo número (o `docs-check` rejeita id duplicado, mas só pós-merge; renumerar depois cascateia nos `builds-on`). Linha de reserva que o comando não lê é apontada, nunca ignorada; worktrees paralelas colidem no **conflito textual da tabela** no merge — sinal cedo, não lock. Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
 
 ### 5.1 ADR — a decisão
 
@@ -226,7 +226,9 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)
 - `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
+- `scripts/docs-reserve` — reserva NNNN e cria ADR/Spec do template (§5; ADR-0013, SPEC-0007)
 - `scripts/test-docs-check` — cenários de regressão do validador (SPEC-0003)
+- `scripts/test-docs-reserve` — cenários da reserva (SPEC-0007)
 - `scripts/pre-commit` — gate local de referência para repo sem remote (§3)
 - `scripts/casa-init` — instala/atualiza a infraestrutura CASA num repo adotante (§10; testado por `scripts/test-casa-init` no CI)
 - `install.sh` — bootstrap via curl|sh, sem clone (§10; testado por `scripts/test-install` no CI)
