@@ -29,6 +29,7 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0012 | DoD exercita casos de borda; incremento divide ou corta | 2026-07-05 | em uso |
 | 0013 | docs-reserve e formato do ledger de reservas | 2026-07-05 | em uso |
 | 0014 | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | 2026-07-05 | em uso |
+| 0015 | Resolução cross-repo local-first e onde mora a spec de integração | 2026-07-05 | em uso |
 
 ## Reservas Spec
 

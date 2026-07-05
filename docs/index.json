@@ -170,6 +170,19 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0015",
+    "path": "docs/adr/0015-resolucao-cross-repo-local-first-e-onde-mora-a-spec-de-integracao.md",
+    "layer": "adr",
+    "title": "Resolução cross-repo local-first e onde mora a spec de integração",
+    "status": "proposed",
+    "builds-on": [
+      "ADR-0008",
+      "ADR-0005"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
