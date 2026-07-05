@@ -13,3 +13,5 @@
 | [ADR-0007](0007-governanca-versionada-e-invariantes-do-core.md) | Governança versionada e invariantes mínimos entram no core do CASA | accepted |
 | [ADR-0008](0008-registry-fechado-de-capacidades-reconhecidas.md) | Capacidades reconhecidas: declaração no router dispara invariante de conteúdo (registry fechado) | accepted |
 | [ADR-0009](0009-ponte-claude-md-para-hosts-sem-agents-md.md) | Ponte CLAUDE.md: host que não lê AGENTS.md recebe um arquivo de importação, criado pelo casa-init | accepted |
+| [ADR-0010](0010-casa-version-e-promessa-do-repo.md) | casa-version é promessa do repo: o casa-init não a carimba; o docs-check sinaliza incoerência | accepted |
+| [ADR-0011](0011-aviso-de-backlog-em-docs-context.md) | docs-check aponta backlog em docs/context/ — aviso de localização | accepted |

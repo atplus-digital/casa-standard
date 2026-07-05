@@ -1,5 +1,17 @@
 # Changelog
 
+## CASA 1.4 — 2026-07-05
+
+- **`casa-version` é promessa do repo** (ADR-0010): o `casa-init` deixa de re-carimbá-la em
+  router existente (insere apenas se ausente; downgrade automático deixa de existir).
+  Atualizar a declaração é ato deliberado, com CHANGELOG lido.
+- O `docs-check` ganha `CONTRACT_VERSION` e **avisa** quando a declaração do router diverge
+  da toolchain instalada — nas duas direções (SPEC-0006). Aviso, nunca erro.
+- O `docs-check` **avisa** quando existe `backlog.md` (qualquer case) em `docs/context/` —
+  mecaniza a Confirmação do ADR-0002 (ADR-0011); mover para `docs/BACKLOG.md`.
+- Fixtures das suítes de teste passam a derivar a versão das constantes dos scripts.
+- Apêndice A.5 registra a dívida de cadência de atualização de adotantes.
+
 ## CASA 1.3 — 2026-07-05
 
 - O `casa-init` cria, quando ausente, a **ponte `CLAUDE.md`** (`@AGENTS.md`): o Claude Code

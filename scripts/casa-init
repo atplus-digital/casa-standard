@@ -12,9 +12,10 @@ Aditivo e idempotente:
     scripts/pre-commit e docs/templates/*.
   - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
     se ausente — com repo-id, tier, casa-version e casa-standard-ref carimbados; se
-    existir, apenas casa-version e casa-standard-ref são atualizados/inseridos no
-    bloco yaml quando possível. CLAUDE.md (ponte de host, ADR-0009) é criado do
-    template só se ausente; existente nunca é tocado (AVISO se falta @AGENTS.md).
+    existir, apenas casa-standard-ref é atualizado; casa-version é a promessa do
+    repo (ADR-0010) — inserida só se ausente, nunca alterada. CLAUDE.md (ponte de
+    host, ADR-0009) é criado do template só se ausente; existente nunca é tocado
+    (AVISO se falta @AGENTS.md).
   - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente);
     sem remote ou host sem adaptador de CI → pre-commit hook, com AVISO
     quando há remote (hook alheio não é tocado); sem .git → orienta.
@@ -28,7 +29,8 @@ import argparse, filecmp, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
-CASA_VERSION = "1.3"
+# Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
+CASA_VERSION = "1.4"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/pre-commit",
@@ -79,36 +81,39 @@ def say(tag, msg):
 
 
 def upsert_router_meta(text, ref):
+    """casa-standard-ref é da ferramenta: sempre atualizado. casa-version é a PROMESSA do
+    repo (ADR-0010): inserida só se ausente, NUNCA alterada — atualizá-la é ato deliberado
+    de quem leu o CHANGELOG; o docs-check sinaliza enquanto declaração e toolchain divergirem."""
     lines = text.splitlines()
     try:
         start = next(i for i, ln in enumerate(lines) if ln.strip().lower() == "```yaml")
         end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "```")
     except StopIteration:
-        return text, False
+        return text, []
 
-    def set_key(key, value, after_keys):
+    changed = []
+
+    def set_key(key, value, after_keys, only_if_missing=False):
+        nonlocal end
         pattern = re.compile(rf"^({re.escape(key)}:)(\s*)(\S+)(.*)$")
         for i in range(start + 1, end):
             m = pattern.match(lines[i])
             if m:
-                if m.group(3) == value:
-                    return True
+                if only_if_missing or m.group(3) == value:
+                    return
                 lines[i] = f"{key}: {value}{m.group(4)}"
-                return True
+                changed.append(f"{key} → {value}")
+                return
         insert_at = end
         for i in range(start + 1, end):
             if any(re.match(rf"^{re.escape(k)}:", lines[i]) for k in after_keys):
                 insert_at = i + 1
         lines.insert(insert_at, f"{key}: {value}")
-        return True
+        end += 1
+        changed.append(f"{key} → {value}")
 
-    changed = False
-    before = list(lines)
-    set_key("casa-version", CASA_VERSION, ["casa-tier", "casa-repo-id"])
-    end += len(lines) - len(before)
-    before = list(lines)
+    set_key("casa-version", CASA_VERSION, ["casa-tier", "casa-repo-id"], only_if_missing=True)
     set_key("casa-standard-ref", ref, ["casa-version", "casa-tier", "casa-repo-id"])
-    changed = lines != text.splitlines()
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
 
 
@@ -159,10 +164,10 @@ def main():
         say("criado", f"AGENTS.md (router; repo-id={repo_id}, tier={args.tier} — preencha as seções)")
     else:
         old = router.read_text(encoding="utf-8")
-        new, _ = upsert_router_meta(old, ref)
+        new, changed = upsert_router_meta(old, ref)
         if new != old:
             router.write_bytes(new.encode("utf-8"))  # preserva LF no Windows (ver acima)
-            say("atualizado", f"AGENTS.md: casa-version → {CASA_VERSION}; casa-standard-ref → {ref}")
+            say("atualizado", "AGENTS.md: " + "; ".join(changed))
         else:
             say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
 

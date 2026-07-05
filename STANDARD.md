@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.3 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.4 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -156,13 +156,13 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 
 `scripts/docs-check` roda no gate automatizado de todo repo T1 (§3 — CI ou pre-commit hook). **Erro = exit 1 por padrão**; `--warn-only` imprime tudo e sai 0, e existe só para a janela de adoção (§10).
 
-1. **Router íntegro**: `AGENTS.md` existe, declara `casa-repo-id`, `casa-tier`, `casa-version` e `casa-standard-ref` em bloco `yaml`, tem `## Como validar (DoD global do repo)` com ao menos uma linha executável, e os ponteiros `docs/context/*.md` do mapa resolvem. Capítulo **reconhecido** declarado no mapa dispara, além da existência, um invariante de conteúdo — hoje `docs/context/TESTS.md` exige ao menos um comando canônico em bloco de código (registry fechado, §4; estender = ADR no `casa-standard`). Acima de ~150 linhas sai como aviso (mova conteúdo para capítulo).
+1. **Router íntegro**: `AGENTS.md` existe, declara `casa-repo-id`, `casa-tier`, `casa-version` e `casa-standard-ref` em bloco `yaml`, tem `## Como validar (DoD global do repo)` com ao menos uma linha executável, e os ponteiros `docs/context/*.md` do mapa resolvem. Capítulo **reconhecido** declarado no mapa dispara, além da existência, um invariante de conteúdo — hoje `docs/context/TESTS.md` exige ao menos um comando canônico em bloco de código (registry fechado, §4; estender = ADR no `casa-standard`). Acima de ~150 linhas sai como aviso (mova conteúdo para capítulo). `casa-version` divergente da versão de contrato da toolchain instalada sai como **aviso** nas duas direções — declaração atrás pede leitura do CHANGELOG e atualização deliberada da promessa; toolchain atrás pede `casa-init` de snapshot atual (ADR-0010).
 2. **Frontmatter válido**: sintaxe dentro do subconjunto suportado (§6 — linha não reconhecida é erro, nunca ignorada), campos obrigatórios (`status`, `date`), data de calendário real em `AAAA-MM-DD`, vocabulário de status por camada, e vocabulário fechado de campos — campo desconhecido sai como aviso (§6).
 3. **Derivação íntegra**: filename no padrão `NNNN-kebab.md`, H1 presente no corpo (após o frontmatter; comentário não conta), id único.
 4. **Grafo íntegro**: `builds-on`/`superseded-by` resolvem (referência cross-repo vira aviso); sem auto-supersessão; `superseded-by` só em ADR e apontando para ADR; ADR `superseded` tem o bloco `VERDADE ATUAL` real, fora de comentário.
 5. **Spec consistente**: `accepted`/`implemented` tem `## Definition of Done` com comando real e sem placeholder, não mantém checkbox aberto em `## Questões em aberto`; `implemented` tem `implemented-by` não-vazio, sem placeholder e apontando para paths existentes, além de `## Verificação` sem o placeholder — uma Spec só chega a `implemented` no commit de fechamento, onde esses campos são preenchidos.
 6. **Imutabilidade de ADR (CI)**: com `--check-adr-immutability --base-ref <ref>`, compara ADRs modificados contra a base e rejeita **qualquer mudança de corpo** em ADR já aceito/superado/deprecated (o lint não distingue cosmético de semântico — typo/link também conta); mudança de frontmatter e bloco `VERDADE ATUAL` continua permitida.
-7. **Higiene de árvore**: `.orig`, `conflicted copy` e `.DS_Store` sempre; cópia numerada (`x 2.md`, `x copy.md`, `x (1).md`) quando o original existe ao lado — em **todo o repo**, ignorando `.git`, `node_modules`, `.venv`, `dist` e afins.
+7. **Higiene de árvore**: `.orig`, `conflicted copy` e `.DS_Store` sempre; cópia numerada (`x 2.md`, `x copy.md`, `x (1).md`) quando o original existe ao lado — em **todo o repo**, ignorando `.git`, `node_modules`, `.venv`, `dist` e afins. Backlog fora do lugar — arquivo `backlog.md` (qualquer case) em `docs/context/` — sai como **aviso** com instrução de migração para `docs/BACKLOG.md` (§5.1; ADR-0011).
 8. **Índices frescos**: compara os READMEs gerados (e `docs/index.json`, se existir) com os commitados e **falha** se divergirem; `scripts/docs-check --emit-index` regenera.
 
 ---
@@ -184,9 +184,12 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 O contrato do padrão é versionado por `casa-version` no router e resumido em `CHANGELOG.md`.
 `casa-standard-ref` continua
 registrando o snapshot da toolchain copiada pelo `casa-init`; `casa-version` registra qual
-contrato normativo o repo adotante promete seguir. Mudança compatível incrementa a versão
-menor; mudança incompatível exige ADR no `casa-standard`, nota de migração nesta seção e
-janela explícita para repos adotantes. O mantenedor do padrão é `atplus-digital/maicon`;
+contrato normativo o repo adotante promete seguir. **A promessa é do repo** (ADR-0010): o
+`casa-init` a insere no bootstrap e nunca a altera depois — atualizá-la é ato deliberado de
+quem leu o `CHANGELOG` e verificou que o repo cumpre o contrato novo; o `docs-check` avisa
+enquanto declaração e toolchain divergirem (§8, item 1). Mudança compatível incrementa a
+versão menor; mudança incompatível exige ADR no `casa-standard`, nota de migração nesta
+seção e janela explícita para repos adotantes. O mantenedor do padrão é `atplus-digital/maicon`;
 mudança no padrão é PR com conversa e, quando altera comportamento do `docs-check`, atualiza
 esta seção, a §8 e a implementação no mesmo PR.
 
@@ -207,6 +210,8 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 **A.3 Verificação cross-repo do grafo.** Resolver `repo:ADR-0032` contra índices remotos ou um índice federado. Sintoma: decisões compartilhadas começarem a quebrar por rename/supersessão em outro repo.
 
 **A.4 Releases assinadas e canal de distribuição alternativo.** Tags assinadas, changelog publicado e possivelmente `create-casa` via registry. Sintoma: adoção fora do círculo interno ou auditoria exigindo proveniência formal.
+
+**A.5 Cadência de atualização de adotantes.** Detecção de atraso **absoluto** — repo que nunca roda `casa-init` nem tem gate ativo — está fora do alcance de qualquer check local por decisão (ADR-0010: sem rede no gate). A resposta, quando o sintoma aparecer, é processo: rodada periódica de `casa-init` na frota, ou verificação externa ao gate. Sintoma: adotante ≥2 minors atrás gerando migração custosa ou incidente de contrato.
 
 ---
 
