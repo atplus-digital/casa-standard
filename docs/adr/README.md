@@ -15,3 +15,4 @@
 | [ADR-0009](0009-ponte-claude-md-para-hosts-sem-agents-md.md) | Ponte CLAUDE.md: host que não lê AGENTS.md recebe um arquivo de importação, criado pelo casa-init | accepted |
 | [ADR-0010](0010-casa-version-e-promessa-do-repo.md) | casa-version é promessa do repo: o casa-init não a carimba; o docs-check sinaliza incoerência | accepted |
 | [ADR-0011](0011-aviso-de-backlog-em-docs-context.md) | docs-check aponta backlog em docs/context/ — aviso de localização | accepted |
+| [ADR-0012](0012-dod-exercita-casos-de-borda-e-incremento-divide-ou-corta.md) | DoD de Spec exercita os casos de borda; entrega incremental divide a spec ou corta o escopo | accepted |

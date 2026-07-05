@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.4 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.5 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -109,6 +109,7 @@ Fluxo, contrato, casos de borda e DoD **antes** de implementar. Status: `draft �
 - **Casos de borda** preferencialmente em EARS, agnóstico de stack: "QUANDO ⟨gatilho⟩ o sistema DEVE ⟨resposta⟩". Formato sugerido, não mandato.
 - **DoD executável obrigatório** (§7). Sem ele, não sai de `draft`.
 - **Fechamento:** na transição para `implemented`, no mesmo commit: `implemented-by` recebe os paths reais (código, migrations, functions); a seção `## Verificação` recebe a evidência do DoD (comandos rodados + resultado); gotchas descobertos vão para o `AGENTS.md`; estado atual novo vai para o capítulo de contexto pertinente. O `docs-check` valida o lado-Spec do fechamento (`implemented-by` preenchido, `## Verificação` sem placeholder); a propagação de gotchas→`AGENTS.md` e estado→capítulo **não** é mecanizável e fica na revisão humana do PR — é o ponto mais frágil do ciclo.
+- **Entrega incremental divide a spec — ou corta o escopo** (ADR-0012): cada incremento entregável vira uma spec com fechamento atômico próprio, ou o incremento sai do contrato (`## Fora do escopo` decidido + registro em backlog/tracker). Spec guarda-chuva meio-implementada — `implemented` com parcela pendente — não existe: "o que conta como pronto" nunca é interpretação. Ao dividir uma spec já aceita, a original vira `deprecated` (spec não usa `superseded-by`, §6) e as partes novas a citam em `builds-on`.
 - Convenções compartilhadas entre specs moram em `docs/context/CONVENTIONS.md` (capítulo de leitura obrigatória, apontado pelo router) — não no README de specs.
 
 ---
@@ -149,6 +150,8 @@ deno check supabase/functions/dns/
 ```
 
 Cada linha é executável no ambiente descrito no router; sucesso é exit code ou asserção no comentário. Linha parametrizada (ex.: `deno check functions/<fn>/`) declara como enumerar o parâmetro ("para cada Edge alterada") ou vem em forma de loop — placeholder sem regra de enumeração não é executável. O que exige olho humano vai para `## Revisão humana`, separado — o agente sabe o que está e o que não está no loop dele.
+
+**O DoD fecha o loop da spec, não só o do repo** (ADR-0012): cada caso de borda enumerado deve ter linha de DoD — ou teste referenciado por ela — que o exercite; cite os números dos casos no comentário da linha (`npm test -- --run dns   # casos 1–4`). DoD cujos comandos são todos genéricos do repo (subconjunto do DoD global do router) é sinal de spec sem fechamento próprio — o gate fica verde com o contrato mentindo (foi exatamente assim que campos definidos em spec viraram configuração morta em adotante). O vínculo caso↔comando não é mecanizável e fica na **revisão humana do PR**, como a propagação do fechamento (§5.2). Vale para specs novas e tocadas.
 
 ---
 

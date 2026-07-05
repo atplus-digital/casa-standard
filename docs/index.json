@@ -131,6 +131,18 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0012",
+    "path": "docs/adr/0012-dod-exercita-casos-de-borda-e-incremento-divide-ou-corta.md",
+    "layer": "adr",
+    "title": "DoD de Spec exercita os casos de borda; entrega incremental divide a spec ou corta o escopo",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0007"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
