@@ -1,5 +1,18 @@
 # Changelog
 
+## CASA 1.8 — 2026-07-06
+
+- **Detecção agendada de contrato desatualizado, fora do gate** (ADR-0016, SPEC-0008):
+  novo `scripts/casa-update-check` + workflow cron semanal, distribuídos pelo `casa-init`
+  a remotes GitHub (adaptador por host, ADR-0006). Mantém **uma issue** com label
+  `casa-update` no tracker do repo — criada quando o contrato declarado fica atrás do
+  vigente, editada enquanto durar, fechada sozinha quando o repo alcança.
+- Regras duras: exit 0 sempre que o mundo externo falhar (rede, versões ilegíveis) — o
+  job nunca fica vermelho; comparação por versão de contrato, nunca por SHA; rede no
+  `docs-check`/gate continua proibida (ADR-0010).
+- A.5 atualizado: a metade "verificação externa ao gate" está paga para GitHub; resto
+  segue processo.
+
 ## CASA 1.7 — 2026-07-05
 
 - **UI tem endereço no método** (ADR-0014): decisão estrutural (design system, tokens,

@@ -1,6 +1,6 @@
 # CASA — Contexto, ADRs, Specs, Automação
 
-**Versão CASA:** 1.7 · **Status:** accepted (2026-07-05) · **Mantenedor:** atplus-digital/maicon
+**Versão CASA:** 1.8 · **Status:** accepted (2026-07-06) · **Mantenedor:** atplus-digital/maicon
 
 Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
@@ -197,7 +197,7 @@ seção e janela explícita para repos adotantes. O mantenedor do padrão é `at
 mudança no padrão é PR com conversa e, quando altera comportamento do `docs-check`, atualiza
 esta seção, a §8 e a implementação no mesmo PR.
 
-**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente), a ponte `CLAUDE.md` (se ausente; ADR-0009) e o gate do §3 em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `CASA_REF=<tag|sha>`). Projeto **novo** termina aqui: nasce verde.
+**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente), a ponte `CLAUDE.md` (se ausente; ADR-0009), o gate do §3 e — em remote GitHub — o `casa-update-check` agendado (ADR-0016: detecção de contrato desatualizado **fora do gate**, com aviso mantido como issue no tracker) em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `CASA_REF=<tag|sha>`). Projeto **novo** termina aqui: nasce verde.
 
 Repo **existente**: o `casa-init` instala a base e o `docs-check` relata o que falta; a migração de **conteúdo** exige julgamento e segue incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) preencher o `AGENTS.md` router (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente (o gate em si — CI ou hook — o `casa-init` já instalou).
 
@@ -215,7 +215,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 
 **A.4 Releases assinadas e canal de distribuição alternativo.** Tags assinadas, changelog publicado e possivelmente `create-casa` via registry. Sintoma: adoção fora do círculo interno ou auditoria exigindo proveniência formal.
 
-**A.5 Cadência de atualização de adotantes.** Detecção de atraso **absoluto** — repo que nunca roda `casa-init` nem tem gate ativo — está fora do alcance de qualquer check local por decisão (ADR-0010: sem rede no gate). A resposta, quando o sintoma aparecer, é processo: rodada periódica de `casa-init` na frota, ou verificação externa ao gate. Sintoma: adotante ≥2 minors atrás gerando migração custosa ou incidente de contrato.
+**A.5 Cadência de atualização de adotantes.** Detecção de atraso **absoluto** está fora do alcance de qualquer check local por decisão (ADR-0010: sem rede no gate). Para remote GitHub, a metade "verificação externa ao gate" está paga: o `casa-init` instala o `casa-update-check` agendado (ADR-0016, SPEC-0008), que mantém uma issue de aviso enquanto o contrato declarado estiver atrás do vigente. O que resta em processo: host sem adaptador, e repo que nunca rodou `casa-init` nem uma vez — sintoma: adotante ≥2 minors atrás gerando migração custosa ou incidente de contrato.
 
 ---
 
@@ -232,5 +232,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `scripts/test-docs-reserve` — cenários da reserva (SPEC-0007)
 - `scripts/pre-commit` — gate local de referência para repo sem remote (§3)
 - `scripts/casa-init` — instala/atualiza a infraestrutura CASA num repo adotante (§10; testado por `scripts/test-casa-init` no CI)
+- `scripts/casa-update-check` — mantém a issue de contrato desatualizado (A.5; ADR-0016, SPEC-0008; testado por `scripts/test-update-check`)
 - `install.sh` — bootstrap via curl|sh, sem clone (§10; testado por `scripts/test-install` no CI)
 - `docs/templates/docs-check.workflow.yml` — workflow de CI distribuído pelo `casa-init`
+- `docs/templates/casa-update-check.workflow.yml` — workflow agendado do update-check (ADR-0016)

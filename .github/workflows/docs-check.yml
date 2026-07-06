@@ -23,5 +23,7 @@ jobs:
         run: scripts/test-casa-init
       - name: Testar reserva docs-reserve (SPEC-0007)
         run: scripts/test-docs-reserve
+      - name: Testar update-check (SPEC-0008)
+        run: scripts/test-update-check
       - name: Testar instalador curl|sh (SPEC-0002)
         run: scripts/test-install

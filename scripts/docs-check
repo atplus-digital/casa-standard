@@ -53,7 +53,7 @@ ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-r
 ROUTER_TIERS = {"T0", "T1"}
 # Versão do contrato CASA que ESTA toolchain implementa (ADR-0010). Deve ser idêntica à
 # CASA_VERSION do casa-init do mesmo snapshot — o test-casa-init guarda a sincronia.
-CONTRACT_VERSION = "1.7"
+CONTRACT_VERSION = "1.8"
 # Capítulos de contexto RECONHECIDOS (registry FECHADO — STANDARD §4/§8): declarar o
 # ponteiro no router dispara um invariante de CONTEÚDO que mora aqui, no validador. O
 # gatilho é a DECLARAÇÃO no router, nunca a presença física do arquivo no disco; a regra
