@@ -170,6 +170,20 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0016",
+    "path": "docs/adr/0016-deteccao-agendada-de-contrato-desatualizado-fora-do-gate.md",
+    "layer": "adr",
+    "title": "Detecção agendada de contrato desatualizado — rede fora do gate, aviso no tracker",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0010",
+      "ADR-0006",
+      "ADR-0005"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -295,6 +309,25 @@
     "implemented-by": [
       "scripts/docs-reserve",
       "scripts/test-docs-reserve",
+      "scripts/casa-init"
+    ]
+  },
+  {
+    "id": "SPEC-0008",
+    "path": "docs/specs/0008-casa-update-check.md",
+    "layer": "specs",
+    "title": "casa-update-check mantém no tracker o aviso de contrato CASA desatualizado",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0016",
+      "ADR-0010",
+      "ADR-0006"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/casa-update-check",
+      "scripts/test-update-check",
+      "docs/templates/casa-update-check.workflow.yml",
       "scripts/casa-init"
     ]
   }

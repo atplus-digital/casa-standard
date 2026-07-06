@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0008 (casa-update-check), com stubs de curl/gh. DoD: exit 0.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+UC="$ROOT/scripts/casa-update-check"
+pass=0; fail=0
+ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
+
+# Stubs: gh registra chamadas em GH_LOG e devolve GH_LIST no "issue list";
+# curl devolve CURL_FILE ou falha com CURL_FAIL=1. Rede de verdade nunca é tocada.
+STUB="$(mktemp -d)"
+cat > "$STUB/gh" <<'EOF'
+#!/bin/sh
+echo "gh $*" >> "$GH_LOG"
+case "$1 $2" in
+  "issue list") cat "${GH_LIST:-/dev/null}" 2>/dev/null ;;
+esac
+exit 0
+EOF
+cat > "$STUB/curl" <<'EOF'
+#!/bin/sh
+[ "${CURL_FAIL:-0}" = "1" ] && exit 22
+cat "$CURL_FILE"
+EOF
+chmod +x "$STUB/gh" "$STUB/curl"
+PATH="$STUB:$PATH"; export PATH
+
+CHANGELOG="$STUB/changelog.md"
+printf '# Changelog\n\n## CASA 9.9 — 2099-01-01\n\n- coisas\n\n## CASA 9.8 — 2098-01-01\n' > "$CHANGELOG"
+CASA_SOURCE_URL="stub://changelog"; CURL_FILE="$CHANGELOG"
+export CASA_SOURCE_URL CURL_FILE
+
+mkrepo() { # $1 = casa-version declarado
+    R="$(mktemp -d)"
+    printf '# AGENTS.md\n\n```yaml\ncasa-repo-id: t\ncasa-tier: T1\ncasa-version: %s\ncasa-standard-ref: x\n```\n' "$1" > "$R/AGENTS.md"
+    GH_LOG="$R/gh.log"; : > "$GH_LOG"; export GH_LOG
+    GH_LIST="/dev/null"; export GH_LIST
+}
+
+# SPEC-0008/1 — declarado atrás do vigente → cria issue com as duas versões
+mkrepo 1.1
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/1: atrás cria issue"                 '[ "$RC" -eq 0 ] && grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0008/1: título com as duas versões"       'grep -q "declarado 1.1, vigente 9.9" "$GH_LOG"'
+
+# SPEC-0008/2 — issue já aberta → edita, nunca duplica
+mkrepo 1.1
+printf '42\n' > "$STUB/list"; GH_LIST="$STUB/list"; export GH_LIST
+sh "$UC" "$R" >/dev/null 2>&1
+ck "SPEC-0008/2: issue existente é editada"        'grep -q "issue edit 42" "$GH_LOG"'
+ck "SPEC-0008/2: e nenhuma nova é criada"          '! grep -q "issue create" "$GH_LOG"'
+
+# SPEC-0008/3 — em dia → não cria nada e fecha aviso aberto
+mkrepo 9.9
+printf '7\n' > "$STUB/list"; GH_LIST="$STUB/list"; export GH_LIST
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/3: em dia fecha o aviso aberto"      '[ "$RC" -eq 0 ] && grep -q "issue close 7" "$GH_LOG"'
+ck "SPEC-0008/3: e não cria issue"                 '! grep -q "issue create" "$GH_LOG"'
+
+# SPEC-0008/3b — em dia sem aviso aberto → nenhuma ação de issue
+mkrepo 9.9
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/3b: em dia sem aviso não toca issues" '[ "$RC" -eq 0 ] && ! grep -qE "issue (create|edit|close)" "$GH_LOG"'
+
+# SPEC-0008/4 — rede indisponível → exit 0, sem tocar issues, log honesto
+mkrepo 1.1
+OUT=$(CURL_FAIL=1 sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/4: rede fora sai 0"                  '[ "$RC" -eq 0 ]'
+ck "SPEC-0008/4: loga e não toca issues"           'echo "$OUT" | grep -q "não consegui" && ! grep -q "issue" "$GH_LOG"'
+
+# SPEC-0008/5 — casa-version ilegível → exit 0 (quem cobra o router é o docs-check)
+R="$(mktemp -d)"; printf '# AGENTS.md\nsem yaml\n' > "$R/AGENTS.md"
+GH_LOG="$R/gh.log"; : > "$GH_LOG"; export GH_LOG
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/5: router ilegível sai 0 com log"    '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "ilegível"'
+
+# SPEC-0008/6 — declarado à frente do vigente → tratado como em dia
+mkrepo 99.9
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0008/6: à frente não cria issue"          '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
+
+echo
+echo "==== $pass PASS / $fail FAIL ===="
+[ "$fail" -eq 0 ]

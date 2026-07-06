@@ -29,6 +29,8 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0012 | DoD exercita casos de borda; incremento divide ou corta | 2026-07-05 | em uso |
 | 0013 | docs-reserve e formato do ledger de reservas | 2026-07-05 | em uso |
 | 0014 | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | 2026-07-05 | em uso |
+| 0015 | Resolução cross-repo local-first e onde mora a spec de integração | 2026-07-05 | em uso |
+| 0016 | Detecção agendada de contrato desatualizado fora do gate | 2026-07-06 | em uso |
 
 ## Reservas Spec
 
@@ -41,3 +43,4 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0005 | ponte CLAUDE.md no bootstrap | 2026-07-05 | em uso |
 | 0006 | sinalização de manutenção no docs-check | 2026-07-05 | em uso |
 | 0007 | docs-reserve | 2026-07-05 | em uso |
+| 0008 | casa-update-check | 2026-07-06 | em uso |

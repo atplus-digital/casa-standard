@@ -30,10 +30,11 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.7"
+CASA_VERSION = "1.8"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
+    "scripts/casa-update-check",
     "scripts/pre-commit",
     "docs/templates/AGENTS.template.md",
     "docs/templates/CLAUDE.template.md",
@@ -41,12 +42,18 @@ TOOLCHAIN = [
     "docs/templates/spec.template.md",
     "docs/templates/context.TESTS.template.md",
     "docs/templates/docs-check.workflow.yml",
+    "docs/templates/casa-update-check.workflow.yml",
 ]
 # Pontes por host (ADR-0009) — conjunto FECHADO: host de agente que não lê AGENTS.md
 # recebe um arquivo-ponte que importa o router. Host novo entra por ADR, nunca ad-hoc.
 HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
-WORKFLOW_TEMPLATE = "docs/templates/docs-check.workflow.yml"
-WORKFLOW_DEST = ".github/workflows/docs-check.yml"
+# Workflows instalados quando o remote é GitHub (ADR-0006): gate + update-check (ADR-0016).
+GITHUB_WORKFLOWS = [
+    ("docs/templates/docs-check.workflow.yml", ".github/workflows/docs-check.yml",
+     "gate: CI"),
+    ("docs/templates/casa-update-check.workflow.yml", ".github/workflows/casa-update-check.yml",
+     "update-check agendado, ADR-0016"),
+]
 
 
 def utf8_stdio():
@@ -148,7 +155,8 @@ def main():
             say("atualizado", rel)
         else:
             say("em dia", rel)
-    for rel in ("scripts/docs-check", "scripts/docs-reserve", "scripts/pre-commit"):
+    for rel in ("scripts/docs-check", "scripts/docs-reserve", "scripts/casa-update-check",
+                "scripts/pre-commit"):
         (target / rel).chmod(0o755)
 
     # 2. Identidade — propriedade do repo (só a linha casa-standard-ref é da ferramenta)
@@ -197,13 +205,14 @@ def main():
                 for ln in sh(["git", "-C", str(target), "config", "--get-regexp",
                               r"^remote\..*\.url$"]).stdout.splitlines() if " " in ln]
         if any(remote_host(u) == "github.com" for u in urls):
-            wf = target / WORKFLOW_DEST
-            if wf.exists():
-                say("preservado", f"{WORKFLOW_DEST} (workflow é do repo)")
-            else:
-                wf.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(SRC / WORKFLOW_TEMPLATE, wf)
-                say("criado", f"{WORKFLOW_DEST} (gate: CI)")
+            for tpl, dest, label in GITHUB_WORKFLOWS:
+                wf = target / dest
+                if wf.exists():
+                    say("preservado", f"{dest} (workflow é do repo)")
+                else:
+                    wf.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(SRC / tpl, wf)
+                    say("criado", f"{dest} ({label})")
         else:
             if urls:
                 say("AVISO", f"remote sem adaptador de CI ({remote_host(urls[0]) or urls[0]}): "

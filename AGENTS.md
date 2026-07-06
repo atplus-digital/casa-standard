@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.7
+casa-version: 1.8
 casa-standard-ref: self
 ```
 
@@ -25,6 +25,7 @@ python3 scripts/docs-check          # exit 0; mesmo comando do CI
 bash scripts/test-docs-check        # exit 0; cenários do validador (SPEC-0003)
 scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
 scripts/test-docs-reserve           # exit 0; cenários da reserva (SPEC-0007)
+scripts/test-update-check           # exit 0; cenários do update-check (SPEC-0008)
 scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
 ```
 
