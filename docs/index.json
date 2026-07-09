@@ -330,5 +330,21 @@
       "docs/templates/casa-update-check.workflow.yml",
       "scripts/casa-init"
     ]
+  },
+  {
+    "id": "SPEC-0009",
+    "path": "docs/specs/0009-comparacao-semantica-dos-indices-gerados.md",
+    "layer": "specs",
+    "title": "docs-check compara READMEs gerados por conteudo canônico",
+    "status": "implemented",
+    "builds-on": [
+      "SPEC-0003"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-check",
+      "scripts/test-docs-check",
+      "STANDARD.md"
+    ]
   }
 ]

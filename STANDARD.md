@@ -167,7 +167,7 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 5. **Spec consistente**: `accepted`/`implemented` tem `## Definition of Done` com comando real e sem placeholder, não mantém checkbox aberto em `## Questões em aberto`; `implemented` tem `implemented-by` não-vazio, sem placeholder e apontando para paths existentes, além de `## Verificação` sem o placeholder — uma Spec só chega a `implemented` no commit de fechamento, onde esses campos são preenchidos.
 6. **Imutabilidade de ADR (CI)**: com `--check-adr-immutability --base-ref <ref>`, compara ADRs modificados contra a base e rejeita **qualquer mudança de corpo** em ADR já aceito/superado/deprecated (o lint não distingue cosmético de semântico — typo/link também conta); mudança de frontmatter e bloco `VERDADE ATUAL` continua permitida.
 7. **Higiene de árvore**: `.orig`, `conflicted copy` e `.DS_Store` sempre; cópia numerada (`x 2.md`, `x copy.md`, `x (1).md`) quando o original existe ao lado — em **todo o repo**, ignorando `.git`, `node_modules`, `.venv`, `dist` e afins. Backlog fora do lugar — arquivo `backlog.md` (qualquer case) em `docs/context/` — sai como **aviso** com instrução de migração para `docs/BACKLOG.md` (§5.1; ADR-0011).
-8. **Índices frescos**: compara os READMEs gerados (e `docs/index.json`, se existir) com os commitados e **falha** se divergirem; `scripts/docs-check --emit-index` regenera.
+8. **Índices frescos**: compara os READMEs gerados por conteúdo canônico normalizado (e `docs/index.json`, se existir) com os commitados e **falha** se divergirem; `scripts/docs-check --emit-index` regenera.
 
 ---
 
@@ -226,7 +226,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)
-- `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
+- `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices e compara READMEs gerados por conteúdo canônico (§8)
 - `scripts/docs-reserve` — reserva NNNN e cria ADR/Spec do template (§5; ADR-0013, SPEC-0007)
 - `scripts/test-docs-check` — cenários de regressão do validador (SPEC-0003)
 - `scripts/test-docs-reserve` — cenários da reserva (SPEC-0007)

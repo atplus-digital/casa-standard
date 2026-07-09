@@ -317,6 +317,113 @@ OUT=$(python3 "$CHECK" --root "$R" 2>&1)
 ck "ADR-0014: campo desconhecido continua avisando" \
    'echo "$OUT" | grep -q "fora do vocabulário"'
 
+# --- SPEC-0009: README gerado por conteúdo canônico ---
+
+mkrepo
+mkdir -p "$R/docs/specs"
+cat > "$R/docs/specs/0001-a.md" <<'EOF'
+---
+status: draft
+date: 2026-07-08
+builds-on: []
+---
+
+# Spec A
+EOF
+cat > "$R/docs/specs/0002-b.md" <<'EOF'
+---
+status: draft
+date: 2026-07-08
+builds-on: []
+---
+
+# Spec B
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+BASE="$R/docs/specs/README.md"
+python3 - "$BASE" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+lines = p.read_text(encoding="utf-8").splitlines()
+rows = lines[6:]
+rows[0] = rows[0].replace("| [SPEC-0001](0001-a.md) | Spec A | draft |", "|  [SPEC-0001](0001-a.md)  |  Spec A  |  draft  |")
+rows[1] = rows[1].replace("| [SPEC-0002](0002-b.md) | Spec B | accepted |", "| [SPEC-0002](0002-b.md) | Spec B | accepted |")
+cosmetic = [
+    lines[0],
+    "",
+    lines[2],
+    "",
+    "|  id  |  título  |  status  |",
+    "| :--- | :---: | ---: |",
+    "",
+    rows[0],
+    "",
+    rows[1],
+]
+p.write_text("\n".join(cosmetic) + "\n", encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/1: README reformatado continua verde" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "índices: docs/specs/README.md"'
+
+cp "$R/docs/specs/README.md" "$R/docs/specs/README.md.bak"
+python3 - "$R/docs/specs/README.md" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text(encoding="utf-8")
+text = text.replace("| [SPEC-0002](0002-b.md) | Spec B | draft |", "| [SPEC-0002](0002-b.md) | Spec B | accepted |")
+p.write_text(text, encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/2: mudança real de status falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "divergente do gerado"'
+mv "$R/docs/specs/README.md.bak" "$R/docs/specs/README.md"
+
+cp "$R/docs/specs/README.md" "$R/docs/specs/README.md.bak"
+python3 - "$R/docs/specs/README.md" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text(encoding="utf-8")
+text = text.replace("(0001-a.md)", "(0001-a-renamed.md)")
+p.write_text(text, encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/3: mudança real no link do id falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "divergente do gerado"'
+mv "$R/docs/specs/README.md.bak" "$R/docs/specs/README.md"
+
+cp "$R/docs/specs/README.md" "$R/docs/specs/README.md.bak"
+python3 - "$R/docs/specs/README.md" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+lines = p.read_text(encoding="utf-8").splitlines()
+head = lines[:6]
+rows = [ln for ln in lines[6:] if ln.strip()]
+rows = [rows[1], rows[0]]
+p.write_text("\n".join(head + ["", rows[0], "", rows[1]]) + "\n", encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/4: reordenação real falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "divergente do gerado"'
+mv "$R/docs/specs/README.md.bak" "$R/docs/specs/README.md"
+
+cp "$R/docs/specs/README.md" "$R/docs/specs/README.md.bak"
+python3 - "$R/docs/specs/README.md" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if "GERADO" not in ln]
+p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/5: marcador ausente falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "inválido como README gerado"'
+mv "$R/docs/specs/README.md.bak" "$R/docs/specs/README.md"
+
 echo
 echo "==== $pass PASS / $fail FAIL ===="
 [ "$fail" -eq 0 ]
