@@ -25,6 +25,19 @@ ck "SPEC-0007/2: primeira Spec é SPEC-0001"       'echo "$OUT" | grep -q "Reser
 OUT=$(python3 "$RESERVE" adr "Outra decisão" --root "$R" 2>&1)
 ck "SPEC-0007/2: próximo ADR é 0002"              'echo "$OUT" | grep -q "Reserved ADR-0002"'
 
+# SPEC-0007/2b — numeração continua mesmo com docs em subpastas; --dir escreve no alvo
+mkr
+python3 "$RESERVE" spec "Spec-base" --root "$R" >/dev/null 2>&1
+mkdir -p "$R/docs/specs/billing"
+cp "$R/docs/specs/0001-spec-base.md" "$R/docs/specs/billing/0007-legacy.md"
+OUT=$(python3 "$RESERVE" spec "Nova especificação" --root "$R" --dir payments 2>&1)
+ck "SPEC-0007/2b: reserva aninhada respeita a sequência global" \
+   'echo "$OUT" | grep -q "Reserved SPEC-0008"'
+ck "SPEC-0007/2b: reserva aninhada cria no diretório pedido" \
+   '[ -f "$R/docs/specs/payments/0008-nova-especificacao.md" ]'
+ck "SPEC-0007/2b: docs-check continua verde com docs aninhados" \
+   '(cd "$R" && python3 scripts/docs-check)'
+
 # SPEC-0007/3 — reserva manual na tabela acima do max de arquivos é respeitada
 mkr
 mkdir -p "$R/docs"

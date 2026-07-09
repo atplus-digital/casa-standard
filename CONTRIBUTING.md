@@ -17,10 +17,11 @@ um fato mora num arquivo só).
 2. **Branch** `<tipo>/<issue>-descricao`, com `<tipo>` ∈ {`feat`, `fix`, `docs`, `chore`,
    `refactor`, `test`}. Ex.: `feat/8-registry-capacidades`.
 3. **Gatilhos da §3 decidem o que escrever:**
-   - Decisão estrutural → **ADR**: `scripts/docs-reserve adr "título"` reserva o `NNNN` e
-     cria o doc do template (ADR-0013; reserva manual em `docs/BACKLOG.md` continua válida).
-   - Comportamento com contrato → **Spec**: `scripts/docs-reserve spec "título"` (DoD
-     definido **antes** de implementar; §5.2).
+   - Decisão estrutural → **ADR**: `scripts/docs-reserve adr "título" [--dir sub/pasta]`
+     reserva o `NNNN` e cria o doc do template (ADR-0013; reserva manual em `docs/BACKLOG.md`
+     continua válida).
+   - Comportamento com contrato → **Spec**: `scripts/docs-reserve spec "título" [--dir sub/pasta]`
+     (DoD definido **antes** de implementar; §5.2).
    - Nada disparou? Não escreve documento — só código + PR.
    - Alterou o comportamento do `docs-check`? Atualize a **§8** do `STANDARD.md` no mesmo PR.
 4. **Implemente e feche o loop.** Rode o gate até verde (ver abaixo). Spec que conclui vira

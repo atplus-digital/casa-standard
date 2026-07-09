@@ -83,7 +83,7 @@ Duas regras que sustentam o modelo:
 ADR (decisão, o porquê)  →  Spec (comportamento, o quê)  →  código + CI (a entrega)
 ```
 
-Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/NNNN-titulo-kebab.md`; numeração **local por repo e por camada**. Reserve o próximo `NNNN` no PR que cria o doc: `scripts/docs-reserve adr|spec "título"` calcula o número (arquivos + ledger), cria o doc do template e registra a reserva na tabela de `docs/BACKLOG.md` (ADR-0013) — é o ledger que evita dois PRs paralelos alocando o mesmo número (o `docs-check` rejeita id duplicado, mas só pós-merge; renumerar depois cascateia nos `builds-on`). Linha de reserva que o comando não lê é apontada, nunca ignorada; worktrees paralelas colidem no **conflito textual da tabela** no merge — sinal cedo, não lock. Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
+Spec cita os ADRs que a fundamentam e não os redefine. Arquivos em `docs/<camada>/**/NNNN-titulo-kebab.md`; a numeração é **contínua por camada no repo inteiro**, independente da subpasta física. Reserve o próximo `NNNN` no PR que cria o doc: `scripts/docs-reserve adr|spec "título" [--dir sub/pasta]` calcula o número (árvore completa da camada + ledger), cria o doc do template e registra a reserva na tabela de `docs/BACKLOG.md` (ADR-0013) — é o ledger que evita dois PRs paralelos alocando o mesmo número (o `docs-check` rejeita id duplicado, mas só pós-merge; renumerar depois cascateia nos `builds-on`). Linha de reserva que o comando não lê é apontada, nunca ignorada; worktrees paralelas colidem no **conflito textual da tabela** no merge — sinal cedo, não lock. Referência cross-repo usa `repo:ADR-0032` com o `casa-repo-id` do router.
 
 ### 5.1 ADR — a decisão
 
@@ -117,7 +117,7 @@ Fluxo, contrato, casos de borda e DoD **antes** de implementar. Status: `draft �
 
 ## 6. Frontmatter — mínimo e derivado
 
-**`id` e `title` não existem no frontmatter — são derivados.** O `id` vem da pasta + filename (`docs/adr/0032-dns.md` → `ADR-0032`); o `title` vem do primeiro `# H1` do corpo. Determinístico, impossível de divergir, menos campo manual.
+**`id` e `title` não existem no frontmatter — são derivados.** O `id` vem da camada + filename (`docs/adr/0032-dns.md` ou `docs/adr/auth/0032-dns.md` → `ADR-0032`); o `title` vem do primeiro `# H1` do corpo. Determinístico, impossível de divergir, menos campo manual.
 
 ```yaml
 ---
@@ -133,7 +133,7 @@ O frontmatter aceita só o subconjunto YAML do exemplo — escalar, lista inline
 
 O vocabulário de campos é **fechado**: `status`, `date`, `builds-on`, `superseded-by`, `implemented-by`, `deciders`, `design-ref`. Campo fora dele sai como **aviso** — extensão é permitida, mas deliberada: registre o campo novo num ADR do repo ou remova-o. Campo fantasma (presente no arquivo, ausente do grafo) não fica. `design-ref` (escalar; URL ou path relativo) aponta a referência de design **não-normativa** de uma spec com UI — código e snapshot ganham dela em divergência (ADR-0014); o campo é exportado ao `docs/index.json` e não tem validação de forma.
 
-Os `README.md` das pastas de docs (tabela id/título/status) são **gerados** pelo `docs-check` — nunca editados à mão.
+Os `README.md` das raízes das camadas de docs (tabela id/título/status, com links relativos quando há subpastas) são **gerados** pelo `docs-check` — nunca editados à mão.
 
 ---
 
@@ -167,7 +167,7 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 5. **Spec consistente**: `accepted`/`implemented` tem `## Definition of Done` com comando real e sem placeholder, não mantém checkbox aberto em `## Questões em aberto`; `implemented` tem `implemented-by` não-vazio, sem placeholder e apontando para paths existentes, além de `## Verificação` sem o placeholder — uma Spec só chega a `implemented` no commit de fechamento, onde esses campos são preenchidos.
 6. **Imutabilidade de ADR (CI)**: com `--check-adr-immutability --base-ref <ref>`, compara ADRs modificados contra a base e rejeita **qualquer mudança de corpo** em ADR já aceito/superado/deprecated (o lint não distingue cosmético de semântico — typo/link também conta); mudança de frontmatter e bloco `VERDADE ATUAL` continua permitida.
 7. **Higiene de árvore**: `.orig`, `conflicted copy` e `.DS_Store` sempre; cópia numerada (`x 2.md`, `x copy.md`, `x (1).md`) quando o original existe ao lado — em **todo o repo**, ignorando `.git`, `node_modules`, `.venv`, `dist` e afins. Backlog fora do lugar — arquivo `backlog.md` (qualquer case) em `docs/context/` — sai como **aviso** com instrução de migração para `docs/BACKLOG.md` (§5.1; ADR-0011).
-8. **Índices frescos**: compara os READMEs gerados (e `docs/index.json`, se existir) com os commitados e **falha** se divergirem; `scripts/docs-check --emit-index` regenera.
+8. **Índices frescos**: compara os READMEs gerados, percorrendo `docs/adr/**` e `docs/specs/**` (e `docs/index.json`, se existir), com os commitados e **falha** se divergirem; `scripts/docs-check --emit-index` regenera.
 
 ---
 
@@ -226,7 +226,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)
-- `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
+- `scripts/docs-check` — valida frontmatter, grafo e higiene; percorre `docs/adr/**` e `docs/specs/**`, regenera índices (§8)
 - `scripts/docs-reserve` — reserva NNNN e cria ADR/Spec do template (§5; ADR-0013, SPEC-0007)
 - `scripts/test-docs-check` — cenários de regressão do validador (SPEC-0003)
 - `scripts/test-docs-reserve` — cenários da reserva (SPEC-0007)

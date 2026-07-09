@@ -6,6 +6,10 @@ superseded-by: null
 deciders: [maicon]
 ---
 
+> ⚠️ VERDADE ATUAL: ADRs e Specs podem morar em subpastas abaixo de `docs/<camada>/`;
+> `docs-check` varre a árvore inteira da camada e `docs-reserve` mantém a numeração
+> contínua da camada, independente do diretório físico.
+
 # docs-reserve automatiza a reserva de NNNN; o ledger ganha formato de tabela por seção
 
 ## Contexto e problema

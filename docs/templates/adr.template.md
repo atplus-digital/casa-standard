@@ -6,7 +6,7 @@ superseded-by: null         # escalar; preenchido no ADR antigo no commit que ac
 deciders: []
 ---
 
-<!-- id é DERIVADO do filename (docs/adr/NNNN-titulo-kebab.md → ADR-NNNN);
+<!-- id é DERIVADO do filename (docs/adr/**/NNNN-titulo-kebab.md → ADR-NNNN);
      title é DERIVADO do H1 abaixo. Não existem no frontmatter de propósito.
 
      ⚠️ Bloco VERDADE ATUAL — obrigatório quando este ADR for superado.

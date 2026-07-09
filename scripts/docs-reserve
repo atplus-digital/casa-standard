@@ -6,11 +6,12 @@ Decisão e formato do ledger: ADR-0013 · comportamento: SPEC-0007.
 Uso:
   scripts/docs-reserve adr  "título da decisão"        [--dry-run] [--no-emit-index]
   scripts/docs-reserve spec "título do comportamento"  [--dry-run] [--no-emit-index]
+  scripts/docs-reserve adr|spec "título" --dir sub/pasta [--dry-run] [--no-emit-index]
 
 Ledger: docs/BACKLOG.md (ADR-0002), seções `## Reservas ADR` e `## Reservas Spec` com
 tabela `| NNNN | título | data | situação |` (primeira célula também aceita ADR-NNNN /
 SPEC-NNNN — formato que adotantes já usam). O próximo número é
-max(arquivos em docs/<camada>/, NNNNs da tabela) + 1 — reserva manual conta; número
+max(arquivos em docs/<camada>/**, NNNNs da tabela) + 1 — reserva manual conta; número
 liberado à mão nunca é reutilizado (renumerar cascateia, STANDARD §5). Linha da seção
 que o script não consegue ler é APONTADA, nunca ignorada em silêncio (ADR-0003): se for
 reserva manual, migre-a para a tabela ANTES de confiar no número sugerido.
@@ -76,6 +77,8 @@ def main():
     ap.add_argument("camada", choices=sorted(LAYERS))
     ap.add_argument("titulo")
     ap.add_argument("--root", default=".")
+    ap.add_argument("--dir", default=".",
+                    help="subpasta relativa dentro da camada (ex.: auth/flows)")
     ap.add_argument("--dry-run", action="store_true",
                     help="mostra número, arquivo e linha do ledger sem escrever nada")
     ap.add_argument("--no-emit-index", action="store_true",
@@ -85,6 +88,9 @@ def main():
     root = Path(args.root).resolve()
     folder, prefix, heading, tpl_rel = LAYERS[args.camada]
     today = date.today().isoformat()
+    rel_dir = Path(args.dir)
+    if rel_dir.is_absolute() or any(part == ".." for part in rel_dir.parts):
+        sys.exit("docs-reserve: --dir deve ser um caminho relativo simples dentro da camada")
 
     # Pré-requisito (ADR-0011): não criar um segundo ledger com o backlog no lugar errado.
     ctx = root / "docs" / "context"
@@ -109,7 +115,9 @@ def main():
     used = set()
     docs_dir = root / "docs" / folder
     if docs_dir.is_dir():
-        for p in docs_dir.glob("*.md"):
+        for p in docs_dir.rglob("*.md"):
+            if p.name == "README.md" or p.name.endswith(".template.md"):
+                continue
             m = FILE_RE.match(p.name)
             if m:
                 used.add(int(m.group(1)))
@@ -137,7 +145,8 @@ def main():
 
     doc_id = f"{prefix}-{nxt:04d}"
     fname = f"{nxt:04d}-{slug}.md"
-    target = docs_dir / fname
+    target_dir = docs_dir / rel_dir
+    target = target_dir / fname
     if target.exists():
         sys.exit(f"docs-reserve: {target} já existe — nunca sobrescrevo.")
 
@@ -181,11 +190,11 @@ def main():
         end += 2
     lines.insert(insert_at + 1, row)
 
-    docs_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
     target.write_bytes(text.encode("utf-8"))          # LF no Windows
     backlog.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     print(f"Reserved {doc_id}")
-    print(f"Created docs/{folder}/{fname}")
+    print(f"Created {target.relative_to(root).as_posix()}")
     print("Updated docs/BACKLOG.md")
 
     check = root / "scripts" / "docs-check"

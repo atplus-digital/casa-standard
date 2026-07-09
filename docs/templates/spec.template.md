@@ -7,7 +7,7 @@ implemented-by: []          # paths reais (código, migrations, functions) — p
 #                             Código+snapshot ganham dela em divergência; revisar é humano.
 ---
 
-<!-- id é DERIVADO do filename (docs/specs/NNNN-titulo-kebab.md → SPEC-NNNN);
+<!-- id é DERIVADO do filename (docs/specs/**/NNNN-titulo-kebab.md → SPEC-NNNN);
      title é DERIVADO do H1 abaixo. -->
 
 # <comportamento em uma frase — vira o title derivado>

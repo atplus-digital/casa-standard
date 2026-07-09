@@ -73,6 +73,37 @@ $verification
 EOF
 }
 
+spec_doc_at() {
+    path="$1"; status="$2"; impl="$3"; questions="$4"; dod="$5"; verification="$6"
+    mkdir -p "$(dirname "$path")"
+    cat > "$path" <<EOF
+---
+status: $status
+date: 2026-06-13
+builds-on: []
+implemented-by: $impl
+---
+
+# Spec de teste
+
+## Questões em aberto
+
+$questions
+
+## Definition of Done
+
+\`\`\`bash
+$dod
+\`\`\`
+
+## Verificação
+
+\`\`\`text
+$verification
+\`\`\`
+EOF
+}
+
 adr_doc() {
     path="$1"; status="$2"; superseded_by="$3"; truth="$4"; body="$5"
     mkdir -p "$(dirname "$path")"
@@ -185,6 +216,27 @@ adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: substituí
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m supersede)
 OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
 ck "EARS-8: supersessão com VERDADE ATUAL passa" '[ "$RC" -eq 0 ]'
+
+# EARS 8b — docs aninhados entram no índice e preservam o path relativo
+mkrepo
+mkdir -p "$R/docs/adr"
+adr_doc "$R/docs/adr/0001-root.md" accepted null "" "Contexto raiz."
+spec_doc_at "$R/docs/specs/billing/0001-api.md" accepted "[docs/adr/0001-root.md]" "(nenhuma)" "true" "ok"
+OUT=$(python3 "$CHECK" --root "$R" --emit-index 2>&1); RC=$?
+ck "EARS-8b: docs aninhados passam no docs-check" '[ "$RC" -eq 0 ]'
+ck "EARS-8b: README da camada linka o path relativo" \
+   'grep -q "\[SPEC-0001\](billing/0001-api.md)" "$R/docs/specs/README.md"'
+ck "EARS-8b: docs/index.json guarda o path aninhado" \
+   'grep -q '"'"'"path": "docs/specs/billing/0001-api.md"'"'"' "$R/docs/index.json"'
+
+# EARS 8c — id duplicado em subpastas continua sendo erro
+mkrepo
+mkdir -p "$R/docs/adr"
+adr_doc "$R/docs/adr/0001-root.md" accepted null "" "Contexto raiz."
+adr_doc "$R/docs/adr/auth/0001-auth.md" accepted null "" "Contexto duplicado."
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "EARS-8c: id duplicado em subpastas falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "id derivado duplicado"'
 
 # --- SPEC-0004: capítulo de contexto reconhecido (TESTS) ---
 

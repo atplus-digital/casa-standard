@@ -50,7 +50,7 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
   dispara invariante de conteúdo: exige comando canônico. Registry fechado em
   `RECOGNIZED_CHAPTERS`; estender = ADR no próprio repo (ADR-0008 / SPEC-0004).
 - Erro = `exit 1` por padrão. `--warn-only` sai 0 e existe só para a janela de adoção.
-- Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
+- Os `README.md` das raízes de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
   O check de frescor falha se o commitado divergir do gerado.
 - O script é executável sem extensão (`scripts/docs-check`); o CI o invoca via `python3`.
 - `install.sh`: o corpo vive em `main()`, chamada na ÚLTIMA linha — proteção contra
@@ -71,7 +71,7 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 
 - Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
 - Versões do contrato CASA: `CHANGELOG.md`
-- Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
-- Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título"` (ADR-0013)
+- Decisões: `docs/adr/**` · Comportamento: `docs/specs/**` (READMEs GERADOS — não editar)
+- Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título" [--dir sub/pasta]` (ADR-0013)
 - Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`
