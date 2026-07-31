@@ -19,3 +19,4 @@
 | [ADR-0013](0013-docs-reserve-e-formato-do-ledger-de-reservas.md) | docs-reserve automatiza a reserva de NNNN; o ledger ganha formato de tabela por seção | accepted |
 | [ADR-0014](0014-onde-a-ui-mora-adr-de-sistema-estados-na-spec-design-ref-nao-normativo.md) | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | accepted |
 | [ADR-0016](0016-deteccao-agendada-de-contrato-desatualizado-fora-do-gate.md) | Detecção agendada de contrato desatualizado — rede fora do gate, aviso no tracker | accepted |
+| [ADR-0017](0017-ratchet-monotonico-da-janela-de-adocao-por-baseline-versionada.md) | Ratchet monotônico da janela de adoção por baseline versionada | accepted |

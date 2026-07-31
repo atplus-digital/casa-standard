@@ -31,6 +31,7 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0014 | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | 2026-07-05 | em uso |
 | 0015 | Resolução cross-repo local-first e onde mora a spec de integração | 2026-07-05 | em uso |
 | 0016 | Detecção agendada de contrato desatualizado fora do gate | 2026-07-06 | em uso |
+| 0017 | Ratchet monotônico da janela de adoção por baseline versionada | 2026-07-31 | em uso |
 
 ## Reservas Spec
 
@@ -44,3 +45,4 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0006 | sinalização de manutenção no docs-check | 2026-07-05 | em uso |
 | 0007 | docs-reserve | 2026-07-05 | em uso |
 | 0008 | casa-update-check | 2026-07-06 | em uso |
+| 0009 | Ratchet de baseline do modo de adoção | 2026-07-31 | em uso |

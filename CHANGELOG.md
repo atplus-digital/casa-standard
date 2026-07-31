@@ -1,5 +1,23 @@
 # Changelog
 
+## CASA 2.0 — 2026-07-31
+
+- **Janela de adoção com ratchet monotônico** (ADR-0017, SPEC-0009): novo modo
+  `--adoption` exige `docs/.docs-check-baseline.json`; estado igual passa, erro novo falha,
+  progresso exige commitar teto menor e zero exige voltar ao gate estrito.
+- Baseline é multiconjunto canônico de diagnósticos (paths relativos/`/`, coordenada de
+  linha volátil removida, duplicatas preservadas, ordem UTF-8) e o PR não pode fazê-la
+  crescer em relação a `--base-ref`.
+- A primeira baseline só pode nascer contra uma base CASA 1.x e a toolchain revalida o
+  snapshot para impedir que o PR congele erro novo; depois que uma base 2.x chega a zero e
+  remove o arquivo, a janela não pode ser reaberta.
+- Paths e OIDs do snapshot inicial são conferidos contra `git ls-tree`; `export-ignore`,
+  `export-subst`, filtros, symlink e submódulo falham fechados para não inflar ou alterar
+  artificialmente o teto da base.
+- `--warn-only` permanece como alias depreciado, agora com a semântica segura. **Migração
+  incompatível:** atualizar a toolchain, capturar a baseline inicial e trocar o workflow
+  conforme STANDARD §10 antes de declarar `casa-version: 2.0`.
+
 ## CASA 1.8 — 2026-07-06
 
 - **Detecção agendada de contrato desatualizado, fora do gate** (ADR-0016, SPEC-0008):

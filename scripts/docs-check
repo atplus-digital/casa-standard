@@ -3,7 +3,8 @@
 docs-check — implementação de referência do CASA Standard (STANDARD.md §8).
 
 Uso:
-  scripts/docs-check [--root .] [--emit-index] [--warn-only]
+  scripts/docs-check [--root .] [--emit-index]
+  scripts/docs-check --adoption [--emit-baseline] --base-ref <ref>
   scripts/docs-check --check-adr-immutability --base-ref origin/main
 
 O que faz:
@@ -32,12 +33,14 @@ O que faz:
      existir) com os commitados e FALHA se divergirem.
      --emit-index regenera tudo.
 
-Exit: 1 se houver ERRO (default). --warn-only imprime tudo e sai 0 —
-só para a janela de adoção (STANDARD §10).
+Exit: 1 se houver ERRO (default). --adoption só sai 0 quando os erros atuais são
+idênticos à baseline versionada; erro novo, progresso não capturado ou zero ainda com
+baseline falham. --warn-only é alias depreciado de --adoption (STANDARD §10).
 
 Sem dependências externas.
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, io, json, os, re, subprocess, sys, tarfile, tempfile
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -53,7 +56,10 @@ ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-r
 ROUTER_TIERS = {"T0", "T1"}
 # Versão do contrato CASA que ESTA toolchain implementa (ADR-0010). Deve ser idêntica à
 # CASA_VERSION do casa-init do mesmo snapshot — o test-casa-init guarda a sincronia.
-CONTRACT_VERSION = "1.8"
+CONTRACT_VERSION = "2.0"
+BASELINE_REL = Path("docs/.docs-check-baseline.json")
+BASELINE_SCHEMA = 1
+DIAGNOSTIC_FORMAT = 1
 # Capítulos de contexto RECONHECIDOS (registry FECHADO — STANDARD §4/§8): declarar o
 # ponteiro no router dispara um invariante de CONTEÚDO que mora aqui, no validador. O
 # gatilho é a DECLARAÇÃO no router, nunca a presença física do arquivo no disco; a regra
@@ -285,6 +291,305 @@ def _git(root, args):
                           encoding="utf-8", errors="replace")
 
 
+def canonical_error(message, root):
+    """Identidade estável do erro para a baseline de adoção (ADR-0017).
+
+    Paths ficam relativos ao root e sempre usam '/'. Número de linha do parser de
+    frontmatter é coordenada volátil, não identidade. O restante da mensagem faz parte do
+    formato diagnóstico versionado: mudança deliberada exige bump de DIAGNOSTIC_FORMAT.
+    """
+    value = str(message).replace("\\", "/")
+    root_prefix = root.as_posix().rstrip("/") + "/"
+    if value.startswith(root_prefix):
+        value = value[len(root_prefix):]
+    value = re.sub(r"frontmatter linha \d+", "frontmatter linha <n>", value)
+    return value
+
+
+def canonical_errors(errors, root):
+    """Multiconjunto ordenado byte a byte; duplicatas são significativas."""
+    return sorted((canonical_error(error, root) for error in errors),
+                  key=lambda value: value.encode("utf-8"))
+
+
+def render_baseline(entries):
+    payload = {
+        "schema": BASELINE_SCHEMA,
+        "diagnostic-format": DIAGNOSTIC_FORMAT,
+        "errors": entries,
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
+def parse_baseline(text, source):
+    try:
+        payload = json.loads(text)
+    except (TypeError, json.JSONDecodeError) as exc:
+        return None, f"{source}: baseline JSON inválida ({exc})"
+    if not isinstance(payload, dict):
+        return None, f"{source}: baseline deve ser um objeto JSON"
+    expected_keys = {"schema", "diagnostic-format", "errors"}
+    if set(payload) != expected_keys:
+        return None, (f"{source}: campos da baseline inválidos; esperados "
+                      f"{sorted(expected_keys)}")
+    if payload.get("schema") != BASELINE_SCHEMA:
+        return None, (f"{source}: schema da baseline {payload.get('schema')!r} não suportado "
+                      f"(esperado {BASELINE_SCHEMA})")
+    if payload.get("diagnostic-format") != DIAGNOSTIC_FORMAT:
+        return None, (f"{source}: formato diagnóstico {payload.get('diagnostic-format')!r} "
+                      f"não suportado (esperado {DIAGNOSTIC_FORMAT}); a transição exige "
+                      "procedimento de migração definido pelo casa-standard")
+    entries = payload.get("errors")
+    if not isinstance(entries, list) or any(not isinstance(item, str) or not item for item in entries):
+        return None, f"{source}: errors deve ser uma lista não vazia de strings"
+    if not entries:
+        return None, (f"{source}: baseline vazia é inválida — remova o arquivo e encerre "
+                      "o modo de adoção")
+    canonical = sorted(entries, key=lambda value: value.encode("utf-8"))
+    if entries != canonical:
+        return None, f"{source}: entradas fora da ordem canônica UTF-8"
+    if text != render_baseline(entries):
+        return None, (f"{source}: serialização não canônica — regenere com "
+                      "scripts/docs-check --adoption --emit-baseline")
+    return entries, None
+
+
+def read_working_baseline(root):
+    path = root / BASELINE_REL
+    if not path.exists():
+        return None, None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return None, f"{BASELINE_REL.as_posix()}: não foi possível ler ({exc})"
+    return parse_baseline(text, BASELINE_REL.as_posix())
+
+
+def read_base_baseline(root, base_ref):
+    rev = _git(root, ["rev-parse", "--verify", f"{base_ref}^{{commit}}"])
+    if rev.returncode != 0:
+        return None, (f"ratchet: não foi possível resolver --base-ref '{base_ref}' — "
+                      "a monotonicidade precisa de uma base Git verificável")
+    rel = BASELINE_REL.as_posix()
+    present = _git(root, ["cat-file", "-e", f"{base_ref}:{rel}"])
+    if present.returncode != 0:
+        return None, None
+    old = _git(root, ["show", f"{base_ref}:{rel}"])
+    if old.returncode != 0:
+        return None, (f"ratchet: não foi possível ler {rel} em '{base_ref}' "
+                      f"({old.stderr.strip() or old.stdout.strip()})")
+    return parse_baseline(old.stdout, f"{base_ref}:{rel}")
+
+
+def read_base_contract_major(root, base_ref):
+    """Lê a major CASA prometida pela base; governa somente a primeira captura."""
+    old = _git(root, ["show", f"{base_ref}:AGENTS.md"])
+    if old.returncode != 0:
+        return None, (f"ratchet: não foi possível ler AGENTS.md em '{base_ref}' para "
+                      "autorizar a primeira baseline")
+    block = first_yaml_block(old.stdout)
+    match = re.search(r"(?m)^casa-version:\s*([0-9]+)\.[0-9]+(?:\s+#.*)?$", block or "")
+    if not match:
+        return None, (f"ratchet: casa-version da base '{base_ref}' é ilegível; "
+                      "a primeira baseline exige uma base CASA 1.x verificável")
+    return int(match.group(1)), None
+
+
+def read_base_diagnostics(root, base_ref):
+    """Executa esta toolchain sobre um snapshot da base para limitar o bootstrap inicial."""
+    try:
+        listed = subprocess.run(
+            ["git", "ls-tree", "-rz", "--full-tree", base_ref], cwd=root,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        archived = subprocess.run(
+            ["git", "archive", "--format=tar", base_ref], cwd=root,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    except OSError as exc:
+        return None, f"ratchet: não foi possível materializar '{base_ref}' ({exc})"
+    if listed.returncode != 0:
+        detail = listed.stderr.decode("utf-8", errors="replace").strip()
+        return None, f"ratchet: não foi possível listar '{base_ref}' ({detail})"
+    if archived.returncode != 0:
+        detail = archived.stderr.decode("utf-8", errors="replace").strip()
+        return None, f"ratchet: não foi possível arquivar '{base_ref}' ({detail})"
+
+    expected_oids = {}
+    try:
+        records = [record for record in listed.stdout.split(b"\0") if record]
+        for record in records:
+            metadata, raw_path = record.split(b"\t", 1)
+            mode, kind, object_id = metadata.split(b" ", 2)
+            path = raw_path.decode("utf-8")
+            if kind != b"blob" or mode == b"120000":
+                return None, (f"ratchet: snapshot '{base_ref}' contém submódulo ou symlink "
+                              f"não suportado na adoção ({path})")
+            expected_oids[path] = object_id.decode("ascii")
+    except (UnicodeDecodeError, ValueError) as exc:
+        return None, f"ratchet: árvore Git ilegível em '{base_ref}' ({exc})"
+    expected_files = set(expected_oids)
+    if expected_files and not archived.stdout:
+        return None, (f"ratchet: snapshot de '{base_ref}' diverge da árvore Git "
+                      "(export-ignore não é permitido; archive vazio)")
+
+    with tempfile.TemporaryDirectory(prefix="casa-base-") as tmp:
+        snapshot = Path(tmp)
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archived.stdout), mode="r:") as bundle:
+                bundle.extractall(snapshot)
+        except (OSError, tarfile.TarError) as exc:
+            return None, f"ratchet: não foi possível materializar '{base_ref}' ({exc})"
+        materialized_files = {
+            path.relative_to(snapshot).as_posix()
+            for path in snapshot.rglob("*") if path.is_file()
+        }
+        if materialized_files != expected_files:
+            missing = sorted(expected_files - materialized_files)
+            extra = sorted(materialized_files - expected_files)
+            detail = (f"ausentes={missing[:3]}, extras={extra[:3]}")
+            return None, (f"ratchet: snapshot de '{base_ref}' diverge da árvore Git "
+                          f"(export-ignore não é permitido; {detail})")
+        for rel, expected_oid in sorted(expected_oids.items()):
+            hashed = _git(root, ["hash-object", "--no-filters", str(snapshot / rel)])
+            actual_oid = hashed.stdout.strip() if hashed.returncode == 0 else ""
+            if actual_oid != expected_oid:
+                return None, (f"ratchet: conteúdo materializado de '{rel}' diverge do blob "
+                              f"em '{base_ref}' (atributos export-subst/filtros não são permitidos)")
+        checked = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--root", str(snapshot),
+             "--dump-diagnostics-json"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            encoding="utf-8", errors="replace", check=False)
+        if checked.returncode != 0:
+            detail = checked.stderr.strip() or checked.stdout.strip()
+            return None, f"ratchet: não foi possível validar o snapshot '{base_ref}' ({detail})"
+        try:
+            entries = json.loads(checked.stdout)
+        except json.JSONDecodeError as exc:
+            return None, f"ratchet: diagnóstico interno inválido para '{base_ref}' ({exc})"
+        if not isinstance(entries, list) or any(not isinstance(item, str) for item in entries):
+            return None, f"ratchet: diagnóstico interno inesperado para '{base_ref}'"
+        return entries, None
+
+
+def multiset_added(candidate, ceiling):
+    """Entradas (com multiplicidade) de candidate que não cabem em ceiling."""
+    return sorted((Counter(candidate) - Counter(ceiling)).elements(),
+                  key=lambda value: value.encode("utf-8"))
+
+
+def apply_adoption_policy(root, validation_errors, adoption, emit_baseline, base_ref):
+    """Aplica o ratchet sem misturar erros de política na baseline de erros do repo.
+
+    Retorna (erros_de_política, notas, emissão_bem_sucedida). A baseline da base Git fecha
+    o loophole delete/edita/recaptura em PR: o teto versionado só pode diminuir.
+    """
+    policy_errors, notes = [], []
+    current = canonical_errors(validation_errors, root)
+    path = root / BASELINE_REL
+    working, working_error = read_working_baseline(root)
+
+    if not adoption:
+        if path.exists() and not validation_errors:
+            if working_error:
+                policy_errors.append(working_error)
+            else:
+                policy_errors.append(
+                    f"{BASELINE_REL.as_posix()}: repo já passa estrito — remova a baseline "
+                    "residual e mantenha o gate sem --adoption")
+        return policy_errors, notes, False
+
+    base, base_error = read_base_baseline(root, base_ref)
+    if base_error:
+        policy_errors.append(base_error)
+    if working_error:
+        policy_errors.append(working_error)
+    base_ceiling = base
+    if not base_error and base is None and (working is not None or emit_baseline):
+        base_major, contract_error = read_base_contract_major(root, base_ref)
+        if contract_error:
+            policy_errors.append(contract_error)
+        elif base_major >= 2:
+            policy_errors.append(
+                f"ratchet: {base_ref} já declara CASA {base_major}.x sem baseline; "
+                "a janela de adoção encerrada não pode ser reaberta")
+        else:
+            base_ceiling, diagnostics_error = read_base_diagnostics(root, base_ref)
+            if diagnostics_error:
+                policy_errors.append(diagnostics_error)
+
+    if emit_baseline:
+        if policy_errors:
+            return policy_errors, notes, False
+        if not current:
+            policy_errors.append(
+                "ratchet: zero erros — baseline não será criada; remova a baseline existente "
+                "e use o gate estrito sem --adoption")
+            return policy_errors, notes, False
+        for label, ceiling in (("a baseline da working tree", working),
+                               (f"o teto verificado de {base_ref}", base_ceiling)):
+            if ceiling is None:
+                continue
+            added = multiset_added(current, ceiling)
+            if added:
+                policy_errors.append(
+                    f"ratchet: {len(added)} erro(s) novo(s) excedem {label}; "
+                    "corrija-os antes de apertar a baseline")
+                policy_errors.extend(f"ratchet: erro novo: {item}" for item in added)
+        if policy_errors:
+            return policy_errors, notes, False
+        rendered = render_baseline(current)
+        if working == current:
+            notes.append(f"Ratchet: {BASELINE_REL.as_posix()} já está no teto atual.")
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(rendered.encode("utf-8"))
+            verb = "criada" if working is None else "apertada"
+            notes.append(
+                f"Ratchet: {BASELINE_REL.as_posix()} {verb} para {len(current)} erro(s).")
+        return policy_errors, notes, True
+
+    if working is None and not working_error:
+        policy_errors.append(
+            f"ratchet: {BASELINE_REL.as_posix()} ausente — capture o teto inicial com "
+            "scripts/docs-check --adoption --emit-baseline --base-ref " + base_ref)
+        return policy_errors, notes, False
+    if policy_errors:
+        return policy_errors, notes, False
+
+    if base_ceiling is not None:
+        growth = multiset_added(working, base_ceiling)
+        if growth:
+            policy_errors.append(
+                f"ratchet: a baseline cresceu {len(growth)} erro(s) em relação a {base_ref}; "
+                "o teto versionado só pode diminuir")
+            policy_errors.extend(f"ratchet: entrada adicionada: {item}" for item in growth)
+
+    if not current:
+        policy_errors.append(
+            "ratchet: boa notícia — o repo chegou a zero erros; remova "
+            f"{BASELINE_REL.as_posix()} e --adoption para encerrar a janela")
+        return policy_errors, notes, False
+
+    new_errors = multiset_added(current, working)
+    resolved = multiset_added(working, current)
+    if new_errors:
+        policy_errors.append(
+            f"ratchet: regressão — {len(new_errors)} erro(s) novo(s) fora da baseline")
+        policy_errors.extend(f"ratchet: erro novo: {item}" for item in new_errors)
+    if resolved:
+        if new_errors:
+            policy_errors.append(
+                f"ratchet: {len(resolved)} erro(s) legado(s) também foram resolvidos; "
+                "corrija a regressão antes de apertar o teto")
+        else:
+            policy_errors.append(
+                f"ratchet: boa notícia — {len(resolved)} erro(s) foram resolvidos; aperte o teto com "
+                "scripts/docs-check --adoption --emit-baseline --base-ref " + base_ref)
+    if not new_errors and not resolved and not policy_errors:
+        notes.append(f"Ratchet: teto mantido em {len(current)} erro(s) legado(s).")
+    return policy_errors, notes, False
+
+
 def _body_without_frontmatter(text):
     raw, body = split_frontmatter(text)
     return body if raw is not None else text
@@ -341,14 +646,30 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=".")
     ap.add_argument("--emit-index", action="store_true")
+    ap.add_argument("--adoption", action="store_true",
+                    help="janela de adoção com ratchet por baseline versionada")
     ap.add_argument("--warn-only", action="store_true",
-                    help="imprime erros mas sai 0 (janela de adoção, STANDARD §10)")
+                    help="alias depreciado de --adoption (CASA 2.0)")
+    ap.add_argument("--emit-baseline", action="store_true",
+                    help="cria/aperta a baseline do modo de adoção; nunca aumenta o teto")
     ap.add_argument("--check-adr-immutability", action="store_true",
                     help="compara ADRs modificados contra --base-ref e bloqueia qualquer emenda de corpo")
     ap.add_argument("--base-ref", default=os.environ.get("CASA_BASE_REF", "origin/main"))
+    ap.add_argument("--dump-diagnostics-json", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
-    root = Path(args.root)
+    adoption = args.adoption or args.warn_only
+    if args.emit_baseline and not adoption:
+        ap.error("--emit-baseline exige --adoption")
+    if adoption and args.emit_index:
+        ap.error("--emit-index não pode ser combinado com o modo de adoção; rode separadamente")
+    if args.dump_diagnostics_json and (adoption or args.emit_index or
+                                       args.check_adr_immutability):
+        ap.error("--dump-diagnostics-json é interno e não combina com outros modos")
+    root = Path(args.root).resolve()
     errors, warnings, docs = [], [], {}
+
+    if args.warn_only:
+        warnings.append("--warn-only foi depreciado no CASA 2.0; use --adoption")
 
     validate_router(root, errors, warnings)
     check_backlog_location(root, warnings)
@@ -521,15 +842,37 @@ def main():
         if ij.exists() and ij.read_text(encoding="utf-8") != index_text:
             errors.append("índices: docs/index.json divergente — rode scripts/docs-check --emit-index")
 
+    if args.dump_diagnostics_json:
+        print(json.dumps(canonical_errors(errors, root), ensure_ascii=False))
+        return
+
+    immutability_errors = []
     if args.check_adr_immutability:
-        check_adr_immutability(root, args.base_ref, errors)
+        check_adr_immutability(root, args.base_ref, immutability_errors)
+
+    if immutability_errors and args.emit_baseline:
+        policy_errors, policy_notes, emitted = [], [], False
+    else:
+        policy_errors, policy_notes, emitted = apply_adoption_policy(
+            root, errors, adoption, args.emit_baseline, args.base_ref)
 
     for w in warnings:
         print(f"AVISO: {w}")
     for e in errors:
         print(f"ERRO:  {e}")
-    print(f"\n{len(docs)} docs · {len(errors)} erro(s) · {len(warnings)} aviso(s)")
-    sys.exit(0 if (args.warn_only or not errors) else 1)
+    for e in immutability_errors:
+        print(f"ERRO:  {e}")
+    for e in policy_errors:
+        print(f"ERRO:  {e}")
+    for note in policy_notes:
+        print(note)
+    print(f"\n{len(docs)} docs · {len(errors) + len(immutability_errors)} erro(s) · {len(warnings)} aviso(s)"
+          f" · {len(policy_errors)} bloqueio(s) de ratchet")
+    if args.emit_baseline:
+        sys.exit(0 if emitted and not policy_errors and not immutability_errors else 1)
+    if adoption:
+        sys.exit(0 if not policy_errors and not immutability_errors else 1)
+    sys.exit(0 if not errors and not immutability_errors and not policy_errors else 1)
 
 
 if __name__ == "__main__":
