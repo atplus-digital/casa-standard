@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.8
+casa-version: 2.0
 casa-standard-ref: self
 ```
 
@@ -49,7 +49,8 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Capítulo RECONHECIDO declarado no Mapa de contexto (hoje só o `TESTS.md` em `docs/context/`)
   dispara invariante de conteúdo: exige comando canônico. Registry fechado em
   `RECOGNIZED_CHAPTERS`; estender = ADR no próprio repo (ADR-0008 / SPEC-0004).
-- Erro = `exit 1` por padrão. `--warn-only` sai 0 e existe só para a janela de adoção.
+- Erro = `exit 1` por padrão. Adoção usa `--adoption` + baseline monotônica (ADR-0017);
+  `--warn-only` é só alias depreciado e não burla mais o gate.
 - Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
   O check de frescor falha se o commitado divergir do gerado.
 - O script é executável sem extensão (`scripts/docs-check`); o CI o invoca via `python3`.

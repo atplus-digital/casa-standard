@@ -22,7 +22,8 @@ estruturais, paths reais de implementação e imutabilidade de ADR aceito no CI.
 ## Fluxo
 
 ```bash
-python3 scripts/docs-check [--root .] [--emit-index] [--warn-only]
+python3 scripts/docs-check [--root .] [--emit-index]
+python3 scripts/docs-check --adoption [--emit-baseline] --base-ref origin/main  # SPEC-0009
 python3 scripts/docs-check --check-adr-immutability --base-ref origin/main
 ```
 

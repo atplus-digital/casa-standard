@@ -184,6 +184,20 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0017",
+    "path": "docs/adr/0017-ratchet-monotonico-da-janela-de-adocao-por-baseline-versionada.md",
+    "layer": "adr",
+    "title": "Ratchet monotônico da janela de adoção por baseline versionada",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0006",
+      "ADR-0007",
+      "ADR-0010"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -329,6 +343,24 @@
       "scripts/test-update-check",
       "docs/templates/casa-update-check.workflow.yml",
       "scripts/casa-init"
+    ]
+  },
+  {
+    "id": "SPEC-0009",
+    "path": "docs/specs/0009-ratchet-de-baseline-do-modo-de-adocao.md",
+    "layer": "specs",
+    "title": "docs-check limita a janela de adoção por baseline monotônica",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0017",
+      "SPEC-0003"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-check",
+      "scripts/test-docs-check",
+      "scripts/casa-init",
+      "STANDARD.md"
     ]
   }
 ]

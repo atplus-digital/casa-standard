@@ -12,3 +12,4 @@
 | [SPEC-0006](0006-sinalizacao-de-manutencao-no-docs-check.md) | docs-check sinaliza manutenção: coerência de versão de contrato e localização do backlog | implemented |
 | [SPEC-0007](0007-docs-reserve.md) | docs-reserve reserva o próximo NNNN e cria o documento do template | implemented |
 | [SPEC-0008](0008-casa-update-check.md) | casa-update-check mantém no tracker o aviso de contrato CASA desatualizado | implemented |
+| [SPEC-0009](0009-ratchet-de-baseline-do-modo-de-adocao.md) | docs-check limita a janela de adoção por baseline monotônica | implemented |

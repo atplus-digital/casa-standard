@@ -45,12 +45,13 @@ Para validar um repo localmente:
 ```bash
 python3 scripts/docs-check               # valida; exit 1 se houver erro
 python3 scripts/docs-check --emit-index  # regenera os README.md das pastas de docs e docs/index.json
-python3 scripts/docs-check --warn-only   # imprime tudo e sai 0 (só na janela de adoção)
+python3 scripts/docs-check --adoption --emit-baseline --base-ref origin/main  # inicia migração 1.x → 2.0
+python3 scripts/docs-check --adoption --base-ref origin/main                  # gate temporário monotônico
 ```
 
 ## Status
 
-CASA `1.1`, `accepted` desde 2026-06-13. Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
+CASA `2.0`, `accepted` desde 2026-07-31. Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
 
 ## Licença
 

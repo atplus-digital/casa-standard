@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0003 e SPEC-0004 (docs-check). DoD: exit 0 = todos verdes.
+# Cenários das SPEC-0003, SPEC-0004, SPEC-0006 e SPEC-0009. DoD: exit 0 = todos verdes.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
@@ -316,6 +316,250 @@ python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1)
 ck "ADR-0014: campo desconhecido continua avisando" \
    'echo "$OUT" | grep -q "fora do vocabulário"'
+
+# --- SPEC-0009: ratchet monotônico da janela de adoção (ADR-0017) ---
+
+git_base() {
+    (cd "$R" && git init -q &&
+     git config user.email casa@example.invalid && git config user.name CASA &&
+     git add . && git commit -q -m base)
+}
+
+git_legacy_base() {
+    sed 's/casa-version: 2.0/casa-version: 1.8/' "$R/AGENTS.md" > "$R/AGENTS.tmp" \
+        && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+    git_base
+    sed 's/casa-version: 1.8/casa-version: 2.0/' "$R/AGENTS.md" > "$R/AGENTS.tmp" \
+        && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+}
+
+remove_router_key() {
+    key="$1"
+    grep -v "^${key}:" "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+}
+
+# Casos 1–3, 7 e 13 — baseline ausente falha; primeira captura, estado igual,
+# emissão idempotente e alias depreciado passam.
+mkrepo
+remove_router_key "casa-standard-ref"
+git_legacy_base
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/1: adoção sem baseline falha com comando de captura" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q -- "--emit-baseline"'
+OUT=$(python3 "$CHECK" --root "$R" --warn-only --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/13a: primeiro warn-only pós-upgrade falha fechado" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "depreciado" && echo "$OUT" | grep -q -- "--emit-baseline"'
+touch "$R/novo-no-bootstrap.orig"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/2a: primeira captura recusa erro ausente da base" \
+   '[ "$RC" -ne 0 ] && [ ! -e "$R/docs/.docs-check-baseline.json" ] && echo "$OUT" | grep -q "teto verificado"'
+rm "$R/novo-no-bootstrap.orig"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/2: primeira captura cria baseline canônica" \
+   '[ "$RC" -eq 0 ] && [ -f "$R/docs/.docs-check-baseline.json" ] && grep -q '"'"'"schema": 1'"'"' "$R/docs/.docs-check-baseline.json"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/3: conjunto idêntico mantém adoção verde" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "teto mantido"'
+PARENT=$(dirname "$R"); NAME=$(basename "$R")
+OUT=$(cd "$PARENT" && python3 "$CHECK" --root "$NAME" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/3b: identidade independe da grafia relativa do root" '[ "$RC" -eq 0 ]'
+BEFORE=$(git -C "$R" hash-object docs/.docs-check-baseline.json)
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+AFTER=$(git -C "$R" hash-object docs/.docs-check-baseline.json)
+ck "SPEC-0009/7: emissão sem mudança é no-op idempotente" \
+   '[ "$RC" -eq 0 ] && [ "$BEFORE" = "$AFTER" ] && echo "$OUT" | grep -q "já está no teto"'
+OUT=$(python3 "$CHECK" --root "$R" --warn-only --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/13: warn-only é alias seguro e depreciado" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "depreciado"'
+
+# Caso 4 — erro novo falha no gate e não pode ser incorporado pelo emissor.
+(cd "$R" && git add . && git commit -q -m baseline)
+touch "$R/regressao.orig"
+BASELINE_HASH=$(git -C "$R" hash-object docs/.docs-check-baseline.json)
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/4a: erro novo falha e é nomeado" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "regressão" && echo "$OUT" | grep -q "regressao.orig"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/4b: emissor recusa aumentar o teto" \
+   '[ "$RC" -ne 0 ] && [ "$BASELINE_HASH" = "$(git -C "$R" hash-object docs/.docs-check-baseline.json)" ]'
+
+# Casos 5 e 6 — progresso fica vermelho até a baseline ser apertada no mesmo PR.
+mkrepo
+remove_router_key "casa-standard-ref"
+touch "$R/legado.orig"
+git_legacy_base
+python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD >/dev/null
+(cd "$R" && git add . && git commit -q -m baseline)
+rm "$R/legado.orig"
+touch "$R/troca.orig"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/4c: trocar erro entre paths falha como novo + resolvido" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "troca.orig" && echo "$OUT" | grep -q "também foram resolvidos"'
+rm "$R/troca.orig"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/5: erro resolvido pede para apertar o teto" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "boa notícia" && echo "$OUT" | grep -q -- "--emit-baseline"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/6a: emissão reduz a baseline" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "apertada para 1 erro"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/6b: teto menor passa contra a baseline maior da base" '[ "$RC" -eq 0 ]'
+
+# Casos 8 e 9 — zero força o fim da janela nos modos de adoção e estrito.
+mkrepo
+remove_router_key "casa-standard-ref"
+git_legacy_base
+python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD >/dev/null
+(cd "$R" && git add . && git commit -q -m baseline)
+sed '/^casa-tier:/a casa-standard-ref: restaurado' "$R/AGENTS.md" > "$R/AGENTS.tmp" \
+    && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/8a: zero no modo de adoção exige encerrar a janela" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "chegou a zero erros"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/8b: emissor recusa baseline vazia" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "zero erros"'
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/9a: gate estrito rejeita baseline residual" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "baseline residual"'
+rm "$R/docs/.docs-check-baseline.json"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/9b: remover baseline deixa gate estrito verde" '[ "$RC" -eq 0 ]'
+
+# Caso 10 — delete-and-recapture não lava erro novo contra a baseline da base Git.
+mkrepo
+remove_router_key "casa-standard-ref"
+git_legacy_base
+python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD >/dev/null
+(cd "$R" && git add . && git commit -q -m baseline)
+rm "$R/docs/.docs-check-baseline.json"
+touch "$R/lavagem.orig"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/10: apagar e recapturar não aumenta teto da base" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "excedem o teto verificado" && [ ! -f "$R/docs/.docs-check-baseline.json" ]'
+BASELINE_COMMIT=$(git -C "$R" rev-parse HEAD)
+git -C "$R" show "${BASELINE_COMMIT}:docs/.docs-check-baseline.json" \
+    > "$R/docs/.docs-check-baseline.json"
+python3 - "$R/docs/.docs-check-baseline.json" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8"))
+payload["errors"].append("higiene: arquivo proibido na árvore: lavagem.orig")
+payload["errors"].sort(key=lambda value: value.encode("utf-8"))
+path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref "$BASELINE_COMMIT" 2>&1); RC=$?
+ck "SPEC-0009/10b: gate rejeita baseline adulterada que cresceu" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "a baseline cresceu"'
+
+# Caso 10c — depois de encerrada em CASA 2.x, a janela não pode ser reaberta.
+mkrepo
+git_base
+remove_router_key "casa-standard-ref"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/10c: base CASA 2.x sem baseline impede reabertura" \
+   '[ "$RC" -ne 0 ] && [ ! -e "$R/docs/.docs-check-baseline.json" ] && echo "$OUT" | grep -q "não pode ser reaberta"'
+
+# Caso 11 — estados de arquivo inválidos falham sem sobrescrita silenciosa.
+mkrepo
+git_base
+remove_router_key "casa-standard-ref"
+mkdir -p "$R/docs"
+printf '{}\n' > "$R/docs/.docs-check-baseline.json"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/11a: baseline com campos inválidos falha especificamente" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "campos da baseline inválidos"'
+cat > "$R/docs/.docs-check-baseline.json" <<'EOF'
+{
+  "schema": 1,
+  "diagnostic-format": 1,
+  "errors": []
+}
+EOF
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/11b: baseline vazia manual é estado inválido" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "baseline vazia é inválida"'
+
+# Caso 12 — multiplicidade é preservada; resolver uma ocorrência conta como progresso.
+mkrepo
+mkdir -p "$R/docs/specs"
+cat > "$R/docs/specs/0001-duplicado.md" <<'EOF'
+---
+status: draft
+date: 2026-07-31
+builds-on: []
+???
+???
+---
+
+# Diagnóstico duplicado
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null 2>&1 || true
+git_legacy_base
+python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD >/dev/null
+(cd "$R" && git add . && git commit -q -m baseline)
+COUNT=$(grep -c "sintaxe não suportada" "$R/docs/.docs-check-baseline.json")
+awk 'BEGIN { seen=0 } /^\?\?\?$/ { seen++; if (seen == 2) next } { print }' \
+    "$R/docs/specs/0001-duplicado.md" > "$R/docs/specs/0001.tmp" \
+    && mv "$R/docs/specs/0001.tmp" "$R/docs/specs/0001-duplicado.md"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/12: duplicata preservada e uma resolução reduz multiplicidade" \
+   '[ "$COUNT" -eq 2 ] && [ "$RC" -ne 0 ] && echo "$OUT" | grep -q "1 erro(s) foram resolvidos"'
+
+# Guardas operacionais — base ausente e imutabilidade nunca entram na baseline.
+mkrepo
+remove_router_key "casa-standard-ref"
+printf 'AGENTS.md export-ignore\n' > "$R/.gitattributes"
+git_legacy_base
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/snapshot: export-ignore não pode inflar teto inicial" \
+   '[ "$RC" -ne 0 ] && [ ! -e "$R/docs/.docs-check-baseline.json" ] && echo "$OUT" | grep -q "diverge da árvore Git"'
+
+mkrepo
+remove_router_key "casa-standard-ref"
+printf '\n<!-- $Format:%%H$ -->\n' >> "$R/AGENTS.md"
+printf 'AGENTS.md export-subst\n' > "$R/.gitattributes"
+git_legacy_base
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline --base-ref HEAD 2>&1); RC=$?
+ck "SPEC-0009/snapshot: export-subst não pode alterar teto inicial" \
+   '[ "$RC" -ne 0 ] && [ ! -e "$R/docs/.docs-check-baseline.json" ] && echo "$OUT" | grep -q "conteúdo materializado"'
+
+mkrepo
+remove_router_key "casa-standard-ref"
+OUT=$(python3 "$CHECK" --root "$R" --adoption --base-ref refs/heads/inexistente 2>&1); RC=$?
+ck "SPEC-0009/base: ref Git irresolvível falha sem traceback" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "não foi possível resolver" && ! echo "$OUT" | grep -q "Traceback"'
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-index 2>&1); RC=$?
+ck "SPEC-0009/flags: adoção e emit-index exigem execuções separadas" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "rode separadamente"'
+
+mkrepo
+mkdir -p "$R/docs/adr"
+cat > "$R/docs/adr/0001-imutavel.md" <<'EOF'
+---
+status: accepted
+date: 2026-07-31
+builds-on: []
+superseded-by: null
+deciders: [casa]
+---
+
+# Imutável
+
+Corpo original.
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+git_legacy_base
+git -C "$R" branch base-ref
+printf '\nEmenda proibida.\n' >> "$R/docs/adr/0001-imutavel.md"
+remove_router_key "casa-standard-ref"
+(cd "$R" && git add . && git commit -q -m candidato)
+OUT=$(python3 "$CHECK" --root "$R" --adoption --emit-baseline \
+      --check-adr-immutability --base-ref base-ref 2>&1); RC=$?
+ck "SPEC-0009/imutabilidade: violação não pode ser baselinada" \
+   '[ "$RC" -ne 0 ] && [ ! -e "$R/docs/.docs-check-baseline.json" ] && echo "$OUT" | grep -q "teve corpo alterado"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="
