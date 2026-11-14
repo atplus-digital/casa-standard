@@ -1,0 +1,33 @@
+name: Platon public push canary
+
+on:
+  push:
+    branches: [codex/platon-public-canary]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check-public-push:
+    runs-on: [self-hosted, linux, x64, platon-linux-x64-compat]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validar docs (CASA Standard §8)
+        run: python3 scripts/docs-check --check-adr-immutability --base-ref origin/main
+      - name: Testar validador docs-check (SPEC-0003)
+        run: bash scripts/test-docs-check
+      - name: Testar bootstrap casa-init (SPEC-0001)
+        run: scripts/test-casa-init
+      - name: Testar reserva docs-reserve (SPEC-0007)
+        run: scripts/test-docs-reserve
+      - name: Testar update-check (SPEC-0008)
+        run: scripts/test-update-check
+      - name: Testar instalador curl|sh (SPEC-0002)
+        run: scripts/test-install
