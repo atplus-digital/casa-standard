@@ -1,0 +1,3 @@
+self-hosted-runner:
+  labels:
+    - platon-linux-x64-compat
