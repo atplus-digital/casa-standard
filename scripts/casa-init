@@ -33,7 +33,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.8"
+CASA_VERSION = "1.9"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
@@ -86,10 +86,19 @@ def default_branch(target):
             "refs/remotes/origin/HEAD"])
     if r.returncode == 0 and "/" in r.stdout.strip():
         return r.stdout.strip().split("/", 1)[1]
-    for ref in ("refs/remotes/origin/main", "refs/remotes/origin/master",
-                "refs/heads/main", "refs/heads/master"):
-        if sh(["git", "-C", str(target), "rev-parse", "--verify", "--quiet", ref]).returncode == 0:
-            return ref.rsplit("/", 1)[1]
+    # `git push` não grava origin/HEAD: repo criado local e publicado depois cai aqui.
+    remote = [ln[len("refs/remotes/origin/"):] for ln in sh(
+        ["git", "-C", str(target), "for-each-ref", "--format=%(refname)",
+         "refs/remotes/origin/"]).stdout.split() if not ln.endswith("/HEAD")]
+    for name in ("main", "master"):
+        if name in remote:
+            return name
+    if len(remote) == 1:
+        return remote[0]
+    for name in ("main", "master"):
+        if sh(["git", "-C", str(target), "rev-parse", "--verify", "--quiet",
+               f"refs/heads/{name}"]).returncode == 0:
+            return name
     return "main"
 
 
@@ -145,6 +154,64 @@ def upsert_router_meta(text, ref):
     set_key("casa-version", CASA_VERSION, ["casa-tier", "casa-repo-id"], only_if_missing=True)
     set_key("casa-standard-ref", ref, ["casa-version", "casa-tier", "casa-repo-id"])
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
+
+
+HOOK_MARKER = "Gate local do CASA Standard"  # frase presente no scripts/pre-commit de toda versão
+
+
+def _is_casa_hook(path):
+    """Hook instalado por alguma versão do casa-init (cópia ou link) — pode ser atualizado."""
+    try:
+        return HOOK_MARKER in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return path.is_symlink()  # link quebrado: resto de instalação CASA (worktree removido)
+
+
+def install_hook(target):
+    """pre-commit no diretório de hooks EFETIVO (core.hooksPath, diretório comum de worktree)
+    — desde que seja do PRÓPRIO repo: hooksPath global valeria para todos os repos da máquina."""
+    def gitpath(*args):
+        p = Path(sh(["git", "-C", str(target), "rev-parse", *args]).stdout.strip())
+        return (p if p.is_absolute() else target / p).resolve()
+    hook = gitpath("--git-path", "hooks/pre-commit")
+    hooks_dir, common = hook.parent, gitpath("--git-common-dir")
+    if not any(base == hooks_dir or base in hooks_dir.parents for base in (target, common)):
+        say("AVISO", f"core.hooksPath aponta para fora deste repo ({hooks_dir}) — provavelmente "
+                     "configuração global: não instalo um hook que valeria para outros repos; "
+                     "chame `scripts/pre-commit` pelo seu gerenciador de hooks (STANDARD §3)")
+        return
+    hooks_cfg = sh(["git", "-C", str(target), "config", "--get", "core.hooksPath"]).stdout.strip()
+    if hooks_cfg:
+        say("nota", f"core.hooksPath={hooks_cfg}: o hook vai para o diretório configurado")
+    ours = target / "scripts" / "pre-commit"
+    rel = os.path.relpath(hook, target)
+    verb = "criado"
+    if hook.exists() or hook.is_symlink():
+        try:
+            same = hook.resolve() == ours.resolve() or hook.read_bytes() == ours.read_bytes()
+        except OSError:
+            same = False
+        if same:
+            say("em dia", f"{rel} (gate: local)")
+            return
+        if not _is_casa_hook(hook):
+            say("AVISO", f"{hook} existe e não é o do CASA — não toco; "
+                         "integre `scripts/docs-check` a ele")
+            return
+        hook.unlink()  # cópia/link de versão anterior do CASA: atualiza
+        verb = "atualizado"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    # Symlink só quando o hook mora dentro deste checkout; num worktree o diretório de hooks é
+    # COMUM a todos os checkouts — vai cópia, que resolve o validador pelo toplevel de quem
+    # commita (e um link para outro worktree apodreceria).
+    try:
+        if not (target == hooks_dir or target in hooks_dir.parents):
+            raise OSError
+        hook.symlink_to(os.path.relpath(ours, hooks_dir))
+    except OSError:
+        shutil.copy2(ours, hook)
+        hook.chmod(0o755)
+    say(verb, f"{rel} → scripts/pre-commit (gate: local, ADR-0006)")
 
 
 def main():
@@ -254,39 +321,7 @@ def main():
                 say("AVISO", f"remote sem adaptador de CI ({remote_host(urls[0]) or urls[0]}): "
                              "gate local via pre-commit hook (ADR-0006) — integre "
                              "`scripts/docs-check` ao CI do seu host")
-            # Diretório de hooks EFETIVO: respeita core.hooksPath e, em worktree, o diretório
-            # comum — .git/hooks fixo instalaria um hook que o git nunca executa.
-            hp = Path(sh(["git", "-C", str(target), "rev-parse", "--git-path",
-                          "hooks/pre-commit"]).stdout.strip())
-            hook = hp if hp.is_absolute() else (target / hp)
-            hooks_cfg = sh(["git", "-C", str(target), "config", "--get", "core.hooksPath"]).stdout.strip()
-            if hooks_cfg:
-                say("nota", f"core.hooksPath={hooks_cfg}: o hook vai para o diretório configurado")
-            ours = target / "scripts" / "pre-commit"
-            if hook.exists() or hook.is_symlink():
-                try:
-                    same = hook.resolve() == ours.resolve() or hook.read_bytes() == ours.read_bytes()
-                except OSError:
-                    same = False
-                if same:
-                    say("em dia", f"{os.path.relpath(hook, target)} (gate: local)")
-                else:
-                    say("AVISO", f"{hook} existe e não é o do CASA — não toco; "
-                                 "integre `scripts/docs-check` a ele")
-            else:
-                hook.parent.mkdir(parents=True, exist_ok=True)
-                # Symlink só quando o hook mora dentro deste checkout; num worktree o diretório
-                # de hooks é COMUM a todos os checkouts — vai cópia, que resolve o validador
-                # pelo toplevel de quem commita (e um link para outro worktree apodreceria).
-                inside = target in hook.parent.resolve().parents
-                try:
-                    if not inside:
-                        raise OSError
-                    hook.symlink_to(os.path.relpath(ours, hook.parent))
-                except OSError:
-                    shutil.copy2(ours, hook)
-                    hook.chmod(0o755)
-                say("criado", f"{os.path.relpath(hook, target)} → scripts/pre-commit (gate: local, ADR-0006)")
+            install_hook(target)
 
     # 4. Diagnóstico — migração de conteúdo é humana (§10)
     print()
