@@ -36,7 +36,9 @@ scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
 4. Instala o **gate** (ADR-0006): remote GitHub → workflow de CI (de
    `docs/templates/docs-check.workflow.yml`, criado se ausente); sem remote ou remote
    de host sem adaptador de CI → pre-commit hook (symlink para `scripts/pre-commit`),
-   com AVISO quando há remote; sem `.git` → orienta.
+   com AVISO quando há remote; sem `.git` → orienta. (Evoluído pela SPEC-0009: diretório
+   de hooks efetivo e só do próprio repo, cópia em worktree, workflow com o branch padrão
+   real e AVISO de divergência.)
 5. **Diagnostica**: roda o `docs-check` do destino e relata — migração de conteúdo é
    trabalho humano (§10), não deste script.
 

@@ -5,7 +5,7 @@ description: Transforma uma necessidade em ADR ou Spec CASA pronta para revisão
 
 # CASA · propor
 
-Etapas 1–3 do ciclo (STANDARD §9 do casa-standard). Contexto ainda não mapeado? Rode
+Etapas 1–3 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada). Contexto ainda não mapeado? Rode
 `casa-explore` antes.
 
 1. **Gatilho (§3):** decisão estrutural → ADR. Contrato observável (API, fluxo de usuário,
@@ -14,7 +14,9 @@ Etapas 1–3 do ciclo (STANDARD §9 do casa-standard). Contexto ainda não mapea
    `python3 scripts/docs-reserve spec "título"`. Nunca escolha o número à mão.
 3. **ADR** (`status: proposed`): contexto, direcionadores, opções com prós e contras, a
    decisão em uma frase, consequências e `## Confirmação` com um comando que verifica a
-   decisão na prática. Estado atual não entra no ADR — vai para capítulo de contexto.
+   decisão na prática (§5.1). Estado atual não entra no ADR — vai para capítulo de
+   contexto. ADR que substitui outro: no commit que o aceita, o antigo ganha `superseded`,
+   `superseded-by` e o bloco `VERDADE ATUAL` no topo (template do ADR).
 4. **Spec** (`status: draft`): ADRs que a fundamentam em `builds-on`; Fluxo, Contrato e
    Casos de borda numerados, de preferência em EARS ("QUANDO gatilho, o sistema DEVE
    resposta"). O que não dá para decidir vai para `## Questões em aberto` como `- [ ]` — e

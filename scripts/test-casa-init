@@ -167,10 +167,16 @@ all_in() { for n in $NAMES; do [ -f "$1/$n/SKILL.md" ] || return 1; done; }
 ck "SPEC-0010/1: skills em .agents/skills"         'all_in "$SK/.agents/skills"'
 ck "SPEC-0010/1: skills em .claude/skills"         'all_in "$SK/.claude/skills"'
 
-# SPEC-0010/2 — cópias idênticas entre si e ao template (um fato, uma fonte)
-same_all() { for n in $NAMES; do cmp -s "$ROOT/docs/templates/skills/$n/SKILL.md" "$SK/.agents/skills/$n/SKILL.md" &&
-             cmp -s "$ROOT/docs/templates/skills/$n/SKILL.md" "$SK/.claude/skills/$n/SKILL.md" || return 1; done; }
-ck "SPEC-0010/2: cópias idênticas ao template"     'same_all'
+# SPEC-0010/2 — cópias idênticas entre si e ao template, com o link do STANDARD no ref
+# carimbado no router (SPEC-0010/8): um fato, uma fonte
+SKREF="$(sed -n 's/^casa-standard-ref: *\([^ ]*\).*/\1/p' "$SK/AGENTS.md")"
+same_all() { for n in $NAMES; do
+               sed "s#/casa-standard/blob/main/#/casa-standard/blob/$SKREF/#" "$ROOT/docs/templates/skills/$n/SKILL.md" > "$SK.tpl"
+               cmp -s "$SK.tpl" "$SK/.agents/skills/$n/SKILL.md" && cmp -s "$SK.tpl" "$SK/.claude/skills/$n/SKILL.md" || return 1
+             done; }
+ck "SPEC-0010/2: cópias idênticas ao template renderizado" 'same_all'
+ck "SPEC-0010/8: skills apontam o STANDARD no ref da toolchain" \
+   '[ -n "$SKREF" ] && grep -q "casa-standard/blob/$SKREF/STANDARD.md" "$SK/.claude/skills/casa-explore/SKILL.md"'
 
 # SPEC-0010/3 — formato Agent Skills portável (agentskills.io/specification)
 ck "SPEC-0010/3: frontmatter válido e portável" 'python3 - "$ROOT/docs/templates/skills" <<'"'"'EOF'"'"'
@@ -205,6 +211,69 @@ ck "SPEC-0010/5: skill do repo intocada"           'grep -q "name: minha-skill" 
 # SPEC-0010/6 — T0 não recebe skills (sem ADR/Spec para o ciclo operar)
 T0="$(mktemp -d)/t0"; python3 "$INIT" "$T0" --tier T0 >/dev/null
 ck "SPEC-0010/6: T0 sem skills"                    '[ ! -e "$T0/.agents/skills" ] && [ ! -e "$T0/.claude/skills" ]'
+# SPEC-0010/9 — `.claude` como arquivo: AVISO, sem traceback, o resto da instalação segue
+gitrepo s9; : > "$D/.claude"
+OUT=$(python3 "$INIT" "$D" 2>&1); RC=$?
+ck "SPEC-0010/9: .claude arquivo não derruba o casa-init" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q Traceback && echo "$OUT" | grep -q "AVISO.*claude/skills"'
+ck "SPEC-0010/9: gate e .agents/skills instalados mesmo assim" \
+   '[ -e "$D/.git/hooks/pre-commit" ] && [ -f "$D/.agents/skills/casa-explore/SKILL.md" ]'
+
+# SPEC-0010/10 — diretório de skills no .gitignore: AVISO (só esta máquina veria)
+gitrepo s10; printf '.claude/\n' > "$D/.gitignore"
+OUT=$(python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0010/10: .claude/ ignorado gera AVISO" 'echo "$OUT" | grep -q "AVISO.*claude/skills/ está no .gitignore"'
+
+# SPEC-0010/11 — skill casa-* aposentada sai do adotante; homônima alheia fica
+gitrepo s11; mkdir -p "$D/.agents/skills/casa-velha" "$D/.claude/skills/casa-velha"
+printf -- '---\nname: casa-velha\ndescription: x\n---\n' > "$D/.agents/skills/casa-velha/SKILL.md"
+printf -- '---\nname: outra\ndescription: x\n---\n' > "$D/.claude/skills/casa-velha/SKILL.md"
+python3 -c "
+import sys
+from importlib.machinery import SourceFileLoader
+m = SourceFileLoader('casa_init', sys.argv[1]).load_module()
+m.RETIRED_SKILLS = ['casa-velha']; sys.argv = ['casa-init', sys.argv[2]]; m.main()" "$INIT" "$D" >/dev/null 2>&1
+ck "SPEC-0010/11: aposentada removida" '[ ! -e "$D/.agents/skills/casa-velha" ]'
+ck "SPEC-0010/11: homônima alheia preservada" '[ -f "$D/.claude/skills/casa-velha/SKILL.md" ]'
+
+# SPEC-0010/12 — toda seção § citada nas skills existe no STANDARD
+secs_exist() { for s in $(grep -oh "§[0-9]*" "$ROOT"/docs/templates/skills/*/SKILL.md | sort -u | tr -d '§'); do
+               grep -q "^## $s\. " "$ROOT/STANDARD.md" || return 1; done; }
+ck "SPEC-0010/12: seções citadas existem no STANDARD" 'secs_exist'
+
+# SPEC-0009/22 — worktree com validador anterior ao --staged não bloqueia todo commit
+gitrepo wt22; python3 "$INIT" "$D" >/dev/null 2>&1; git -C "$D" add -A; git -C "$D" commit -q -m adota >/dev/null 2>&1
+git -C "$D" checkout -q -b velho
+printf '#!/usr/bin/env python3\nimport argparse\nap = argparse.ArgumentParser(); ap.add_argument("--root")\nap.parse_args()\n' > "$D/scripts/docs-check"
+git -C "$D" commit -qam "validador antigo"; git -C "$D" checkout -q main
+W22="$(mktemp -d)/w"; git -C "$D" worktree add -q "$W22" velho
+echo x > "$W22/x"; git -C "$W22" add x
+OUT=$(git -C "$W22" commit -q -m x 2>&1); RC=$?
+ck "SPEC-0009/22: validador antigo roda no modo dele" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "anterior ao --staged"'
+
+# SPEC-0009/23 — core.hooksPath global: não instala para todos os repos da máquina
+G23="$(mktemp -d)"; mkdir -p "$G23/hooks"; printf '[core]\n\thooksPath = %s/hooks\n' "$G23" > "$G23/gitconfig"
+gitrepo h23; OUT=$(GIT_CONFIG_GLOBAL="$G23/gitconfig" python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0009/23: hooksPath global não recebe hook" '[ -z "$(ls -A "$G23/hooks")" ]'
+ck "SPEC-0009/23: AVISO explica" 'echo "$OUT" | grep -q "AVISO.*fora deste repo"'
+
+# SPEC-0009/24 — hook CASA de versão anterior é atualizado; alheio segue intocado (EARS-8)
+gitrepo h24; python3 "$INIT" "$D" >/dev/null 2>&1
+rm "$D/.git/hooks/pre-commit"
+printf '#!/usr/bin/env bash\n# Gate local do CASA Standard (STANDARD §3, ADR-0001) para repo sem remote/CI.\nexec python3 "$(git rev-parse --show-toplevel)/scripts/docs-check"\n' > "$D/.git/hooks/pre-commit"
+OUT=$(python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0009/24: cópia antiga do hook CASA é atualizada" \
+   'echo "$OUT" | grep -q "atualizado.*pre-commit" && grep -q -- "--staged" "$D/.git/hooks/pre-commit"'
+
+# SPEC-0009/29 — repo publicado sem origin/HEAD, com um único branch remoto
+gitrepo r29 develop; git -C "$D" remote add origin git@github.com:acme/app.git
+git -C "$D" commit -q --allow-empty -m i; git -C "$D" update-ref refs/remotes/origin/develop HEAD
+python3 "$INIT" "$D" >/dev/null 2>&1
+ck "SPEC-0009/29: workflow usa o único branch remoto" 'grep -q "branches: \[develop\]" "$D/.github/workflows/docs-check.yml"'
+
+# SPEC-0009/30 — fila de merge também roda o gate, contra a base do grupo
+ck "SPEC-0009/30: workflow dispara em merge_group" \
+   'grep -q "^  merge_group:" "$D/.github/workflows/docs-check.yml" && grep -q "merge_group.base_sha" "$D/.github/workflows/docs-check.yml"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

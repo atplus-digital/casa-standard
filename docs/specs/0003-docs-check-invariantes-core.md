@@ -30,7 +30,8 @@ python3 scripts/docs-check --check-adr-immutability --base-ref origin/main
    contexto.
 2. Valida ADRs/Specs como antes: frontmatter, grafo, status, índices e higiene.
 3. Aplica as regras fortes de Spec quando `status` é `accepted` ou `implemented`.
-4. Quando `--check-adr-immutability` é usado, compara ADRs modificados contra `--base-ref`
+4. Quando `--check-adr-immutability` é usado (evoluído pela SPEC-0009: por número, contra a
+   merge-base, com exclusão e regressão de status vetadas), compara ADRs modificados contra `--base-ref`
    e rejeita qualquer mudança de corpo em ADR que já estava aceito/superado/deprecated.
 
 ## Contrato

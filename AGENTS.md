@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.8
+casa-version: 1.9
 casa-standard-ref: self
 ```
 

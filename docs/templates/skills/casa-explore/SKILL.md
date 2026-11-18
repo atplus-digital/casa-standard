@@ -5,7 +5,7 @@ description: Mapeia o contexto CASA antes de mexer no código — router AGENTS.
 
 # CASA · explorar
 
-Etapa 4 do ciclo (STANDARD §9 do casa-standard). Objetivo: entender o **porquê** antes do
+Etapa 4 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada). Objetivo: entender o **porquê** antes do
 **o quê**. Não edite nada nesta etapa.
 
 1. Leia o `AGENTS.md` (router): DoD global, gotchas e o Mapa de contexto.
@@ -22,4 +22,5 @@ Etapa 4 do ciclo (STANDARD §9 do casa-standard). Objetivo: entender o **porquê
    - gatilho (§3): decisão estrutural → ADR; contrato observável → Spec; nenhum → só código;
    - o que o repo não responde → pergunte. Não invente.
 
-Decisão de negócio ainda não tomada não vira ADR: vai para o tracker ou `docs/BACKLOG.md`.
+Decisão de negócio ainda não tomada não vira ADR: vai para o issue tracker — ou, em repo sem
+tracker, para `docs/BACKLOG.md` (§5.1).

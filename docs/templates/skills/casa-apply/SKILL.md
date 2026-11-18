@@ -5,7 +5,7 @@ description: Implementa uma Spec CASA aceita até o DoD ficar verde, respeitando
 
 # CASA · aplicar
 
-Etapas 4–5 do ciclo (STANDARD §9 do casa-standard).
+Etapas 4–5 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada).
 
 1. **Confira a Spec:** `status: accepted` e nenhum `- [ ]` em `## Questões em aberto`.
    Em `draft`, ou com questão aberta no ponto que você vai tocar: pare e pergunte — o agente

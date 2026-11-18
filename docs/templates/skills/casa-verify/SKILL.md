@@ -5,7 +5,7 @@ description: Revisa se a implementação cumpre a Spec CASA antes do fechamento 
 
 # CASA · verificar
 
-STANDARD §7 e §5.2 do casa-standard. **Esta etapa é assistiva, nunca gate:** o gate é o
+§7 e §5.2 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada). **Esta etapa é assistiva, nunca gate:** o gate é o
 `docs-check` mais o DoD, ambos determinísticos. Este relatório prepara a revisão humana do
 PR; não aprova nem reprova nada sozinho.
 

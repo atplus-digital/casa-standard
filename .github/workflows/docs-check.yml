@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:   # fila de merge: o check obrigatório também precisa rodar aqui
 
 permissions:
   contents: read
@@ -22,13 +23,13 @@ jobs:
           python-version: "3.12"
       - name: Validar docs (CASA Standard §8)
         env:
-          # PR: compara com o branch de destino; push: com o commit anterior ao push.
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          # PR: branch de destino; fila de merge: base do grupo; push: commit anterior ao push.
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
         run: |
           if git rev-parse -q --verify "${BASE}^{commit}" >/dev/null; then
             python3 scripts/docs-check --check-adr-immutability --base-ref "$BASE"
           else
-            echo "::notice::sem base comparável ('${BASE}': primeiro push ou force-push) — imutabilidade de ADR não verificada neste evento"
+            echo "::warning::sem base comparável ('${BASE}': primeiro push ou force-push) — imutabilidade de ADR NÃO verificada neste evento"
             python3 scripts/docs-check
           fi
       - name: Testar validador docs-check (SPEC-0003)

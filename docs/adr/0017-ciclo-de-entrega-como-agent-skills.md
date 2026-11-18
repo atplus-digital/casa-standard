@@ -22,13 +22,13 @@ simulado no lugar do runtime (Console Platon). A pergunta de revisão que pegari
 — "em que situação este teste passaria com a entrega quebrada?" — não está em lugar nenhum
 do fluxo do agente.
 
-O mercado já transformou fluxos assim em procedimento executável: o OpenSpec distribui
+Em 2026-11-18, o mercado já tinha transformado fluxos assim em procedimento executável: o OpenSpec distribui
 `explore → propose → apply → verify → archive` como comandos do agente; o Spec Kit,
 `specify → plan → tasks → implement` com `analyze`. O formato portável é o **Agent Skills**
-(agentskills.io, sob a Linux Foundation): diretório `<nome>/SKILL.md` com `name` e
-`description` no frontmatter; o agente carrega só a descrição no início e o corpo quando a
-tarefa casa. A convenção de projeto entre clientes é `.agents/skills/`; o Claude Code lê
-apenas `.claude/skills/`.
+(agentskills.io): diretório `<nome>/SKILL.md` com `name` e `description` no frontmatter; o
+agente carrega só a descrição no início e o corpo quando a tarefa casa. Na mesma data, a
+convenção de projeto entre clientes era `.agents/skills/`, e o Claude Code lia apenas
+`.claude/skills/`.
 
 ## Direcionadores da decisão
 
@@ -49,7 +49,7 @@ apenas `.claude/skills/`.
 ciclo; o caso Vision se repete.
 
 ### Opção 2 — Adotar o OpenSpec por inteiro
-**Prós:** fluxo pronto e mantido (75k estrelas). **Contras:** troca o modelo da camada Spec
+**Prós:** fluxo pronto, mantido e popular. **Contras:** troca o modelo da camada Spec
 (spec viva + deltas), traz `tasks.md`, que o §3 delega ao tracker, e exige CASA 2.0. Merece
 piloto próprio, não adoção por arrasto.
 
@@ -82,27 +82,36 @@ lógica da ponte do ADR-0009). Diretório de host novo entra por ADR. As skills 
 **da toolchain**: atualizadas quando divergem do template; skill do repo com outro nome
 nunca é tocada — quem quer customizar cria a sua com outro nome.
 
-O `docs-check` não valida skills (não são gate). O contrato não muda: `casa-version` segue
-igual e as skills chegam pelo `casa-init`, como qualquer atualização de toolchain (ADR-0010).
+Cada skill aponta o §N do `STANDARD.md` por link no **snapshot da toolchain instalada**: o
+template usa `blob/main/` e o `casa-init` carimba o `casa-standard-ref` do adotante — o
+`STANDARD.md` não é copiado para o repo. Skill retirada ou renomeada entra numa lista de
+aposentadas que o `casa-init` remove do adotante (só se for nossa). Diretório de skill que
+não dá para escrever (ex.: `.claude` é arquivo) ou que está no `.gitignore` vira AVISO, sem
+derrubar o resto da instalação.
+
+O `docs-check` não valida skills (não são gate). As skills entram no §2/§9 do STANDARD, o
+que é mudança **compatível** de contrato: a aceitação sobe a versão menor (ADR-0010), para o
+`casa-update-check` avisar os adotantes.
 
 ## Consequências
 
 - O ciclo vira procedimento executável e portável; `/casa-verify` leva para dentro do fluxo
   do agente a pergunta que o elo frágil não fazia.
-- Toda sessão paga as cinco descrições no contexto — elas precisam continuar curtas e
-  específicas.
+- Toda sessão paga as cinco descrições no contexto (~1,5 mil caracteres) — dez, em cliente
+  que lê os dois diretórios; elas precisam continuar curtas e específicas.
 - O adotante passa a ter `.agents/skills/casa-*` e `.claude/skills/casa-*`, idênticos e
   gerados; cliente que lê os dois diretórios vê o mesmo nome duas vezes, com o mesmo
   conteúdo.
 - Texto de skill pode envelhecer em relação ao STANDARD: os testes conferem formato, a
-  identidade das duas cópias e que todo `scripts/…` citado existe na toolchain.
+  identidade das duas cópias, que todo `scripts/…` citado existe na toolchain e que toda
+  seção `§N` citada existe no STANDARD. Que a skill não traga regra própria é revisão humana.
 - Fica para decisão própria: `docs-check --json` (saída estruturada para o `casa-verify`) e
   o modelo de spec viva com deltas do OpenSpec (piloto).
 
 ## Confirmação
 
 ```bash
-scripts/test-casa-init   # SPEC-0010: skills nos dois diretórios, idênticas, formato válido, comandos existentes
+scripts/test-casa-init   # SPEC-0010: skills nos dois diretórios, idênticas, formato válido, comandos e seções existentes
 ```
 
 ## Notas
