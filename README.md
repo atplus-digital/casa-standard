@@ -17,7 +17,7 @@ Critério de design: **complexidade sustentada por automação é barata; comple
 
 - **[STANDARD.md](STANDARD.md)** — o documento normativo. É a fonte da verdade.
 - **[CHANGELOG.md](CHANGELOG.md)** — versões do contrato CASA.
-- **[docs/templates/](docs/templates/)** — templates oficiais de `AGENTS.md`, ADR e Spec.
+- **[docs/templates/](docs/templates/)** — templates oficiais de `AGENTS.md`, ADR e Spec, e as skills do ciclo de entrega (`skills/casa-*`, ADR-0017).
 - **[scripts/docs-check](scripts/docs-check)** — implementação de referência do validador de CI (Python, sem dependências).
 
 ## Começando

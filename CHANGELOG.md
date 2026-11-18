@@ -1,5 +1,13 @@
 # Changelog
 
+## Toolchain — 2026-11-18 · skills do ciclo (ADR-0017; contrato inalterado: CASA 1.8)
+
+- O `casa-init` instala, em repo T1, as skills `casa-explore`, `casa-propose`,
+  `casa-apply`, `casa-verify` e `casa-close` em `.agents/skills/` e `.claude/skills/`
+  (formato aberto Agent Skills): o ciclo do §9 vira procedimento que o agente executa. O
+  `casa-verify` audita caso de borda × teste ("em que situação este teste passaria com a
+  entrega quebrada?") — assistivo, nunca gate. Sem obrigação nova; chega pelo `casa-init`.
+
 ## Toolchain — 2026-11-18 (contrato inalterado: CASA 1.8)
 
 Correções de confiabilidade do gate (SPEC-0009). O contrato não muda — a toolchain passa a

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0001 (casa-init). DoD: exit 0 = todos verdes.
+# Cenários das SPEC-0001, 0009 e 0010 (casa-init). DoD: exit 0 = todos verdes.
 # Roda local e no CI; sem dependências além de git, python3 e coreutils.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -157,6 +157,54 @@ echo "# customizado" >> "$WF"
 OUT=$(python3 "$INIT" "$D" 2>&1)
 ck "SPEC-0009/18: workflow divergente gera AVISO e é preservado" \
    'echo "$OUT" | grep -q "AVISO.*difere do template" && grep -q "customizado" "$WF"'
+
+# --- SPEC-0010: skills do ciclo (ADR-0017) ---
+SK="$(mktemp -d)/sk"; python3 "$INIT" "$SK" --repo-id sk >/dev/null
+NAMES="casa-explore casa-propose casa-apply casa-verify casa-close"
+all_in() { for n in $NAMES; do [ -f "$1/$n/SKILL.md" ] || return 1; done; }
+
+# SPEC-0010/1 — T1: as cinco skills nos dois diretórios
+ck "SPEC-0010/1: skills em .agents/skills"         'all_in "$SK/.agents/skills"'
+ck "SPEC-0010/1: skills em .claude/skills"         'all_in "$SK/.claude/skills"'
+
+# SPEC-0010/2 — cópias idênticas entre si e ao template (um fato, uma fonte)
+same_all() { for n in $NAMES; do cmp -s "$ROOT/docs/templates/skills/$n/SKILL.md" "$SK/.agents/skills/$n/SKILL.md" &&
+             cmp -s "$ROOT/docs/templates/skills/$n/SKILL.md" "$SK/.claude/skills/$n/SKILL.md" || return 1; done; }
+ck "SPEC-0010/2: cópias idênticas ao template"     'same_all'
+
+# SPEC-0010/3 — formato Agent Skills portável (agentskills.io/specification)
+ck "SPEC-0010/3: frontmatter válido e portável" 'python3 - "$ROOT/docs/templates/skills" <<'"'"'EOF'"'"'
+import re, sys
+from pathlib import Path
+dirs = sorted(p for p in Path(sys.argv[1]).iterdir() if p.is_dir())
+assert len(dirs) == 5, dirs
+for d in dirs:
+    t = (d / "SKILL.md").read_text(encoding="utf-8")
+    assert t.startswith("---\n"), d
+    fm = t.split("---\n")[1]
+    keys = dict(re.findall(r"^([a-z-]+): (.*)$", fm, re.M))
+    assert set(keys) == {"name", "description"}, (d, keys)            # só campos portáveis
+    n, desc = keys["name"], keys["description"]
+    assert n == d.name and re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", n) and len(n) <= 64, n
+    assert 0 < len(desc) <= 1024 and "<" not in desc and ">" not in desc, d
+    assert ": " not in desc and " #" not in desc, d                    # escalar YAML simples
+EOF'
+
+# SPEC-0010/4 — todo scripts/… citado nas skills existe na toolchain instalada
+cmds_exist() { for s in $(grep -oh "scripts/[a-z-]*" "$SK"/.agents/skills/*/SKILL.md | sort -u); do
+               [ -f "$SK/$s" ] || return 1; done; }
+ck "SPEC-0010/4: comandos citados existem no destino" 'cmds_exist'
+
+# SPEC-0010/5 — casa-* alterada volta ao template; skill do repo com outro nome intocada
+echo "edição local" >> "$SK/.claude/skills/casa-verify/SKILL.md"
+mkdir -p "$SK/.claude/skills/minha-skill"; printf -- "---\nname: minha-skill\ndescription: x\n---\n" > "$SK/.claude/skills/minha-skill/SKILL.md"
+OUT=$(python3 "$INIT" "$SK" 2>&1)
+ck "SPEC-0010/5: casa-* divergente é atualizada"   'same_all && echo "$OUT" | grep -q "atualizado.*claude/skills/casa-"'
+ck "SPEC-0010/5: skill do repo intocada"           'grep -q "name: minha-skill" "$SK/.claude/skills/minha-skill/SKILL.md"'
+
+# SPEC-0010/6 — T0 não recebe skills (sem ADR/Spec para o ciclo operar)
+T0="$(mktemp -d)/t0"; python3 "$INIT" "$T0" --tier T0 >/dev/null
+ck "SPEC-0010/6: T0 sem skills"                    '[ ! -e "$T0/.agents/skills" ] && [ ! -e "$T0/.claude/skills" ]'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

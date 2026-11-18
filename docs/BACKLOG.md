@@ -31,6 +31,7 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0014 | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | 2026-07-05 | em uso |
 | 0015 | Resolução cross-repo local-first e onde mora a spec de integração | 2026-07-05 | em uso |
 | 0016 | Detecção agendada de contrato desatualizado fora do gate | 2026-07-06 | em uso |
+| 0017 | Ciclo de entrega como Agent Skills: o agente executa o §9; verificação por agente é assistiva, nunca gate | 2026-11-18 | em uso |
 
 ## Reservas Spec
 
@@ -45,3 +46,4 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0007 | docs-reserve | 2026-07-05 | em uso |
 | 0008 | casa-update-check | 2026-07-06 | em uso |
 | 0009 | Gate confiável: hook, CI e imutabilidade validam o que de fato entra | 2026-11-18 | em uso |
+| 0010 | casa-init distribui as skills casa-* do ciclo de entrega | 2026-11-18 | em uso |

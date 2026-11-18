@@ -34,6 +34,8 @@ scripts/
   docs-check               # valida frontmatter, grafo e higiene (§8)
   pre-commit               # gate local quando não há remote (§3)
 <subdir>/AGENTS.md         # opcional: regras que só valem naquele pacote (§4)
+.agents/skills/casa-*/     # T1: o ciclo do §9 como Agent Skills, da toolchain (ADR-0017)
+.claude/skills/casa-*/     # cópia idêntica para o Claude Code, que não lê .agents/ (ADR-0017)
 ```
 
 `AGENTS.md` e o DoD executável existem **sempre**. O resto só existe quando algum gatilho disparar.
@@ -181,6 +183,8 @@ Cada linha é executável no ambiente descrito no router; sucesso é exit code o
 6. Fechamento atômico em um commit: Spec `implemented` + `implemented-by` + `## Verificação`; gotchas → router; estado novo → capítulo; READMEs regenerados.
 7. CI roda o `docs-check`. Divergiu, não entra.
 
+Em repo T1, o `casa-init` instala o ciclo como skills do agente (ADR-0017): `casa-explore` (passo 4), `casa-propose` (1–3), `casa-apply` (4–5), `casa-verify` (revisão do §7/§5.2 antes do fechamento) e `casa-close` (6). As skills apontam para este documento e para a toolchain, sem regra própria; o `casa-verify` é **assistivo, nunca gate** — o gate segue sendo `docs-check` + DoD, determinísticos.
+
 ---
 
 ## 10. Governança, versão e adoção
@@ -197,7 +201,7 @@ seção e janela explícita para repos adotantes. O mantenedor do padrão é `at
 mudança no padrão é PR com conversa e, quando altera comportamento do `docs-check`, atualiza
 esta seção, a §8 e a implementação no mesmo PR.
 
-**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente), a ponte `CLAUDE.md` (se ausente; ADR-0009), o gate do §3 e — em remote GitHub — o `casa-update-check` agendado (ADR-0016: detecção de contrato desatualizado **fora do gate**, com aviso mantido como issue no tracker) em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `… | CASA_REF=<tag|sha> sh -s -- <destino>` — a variável é do `sh`; prefixada ao `curl`, não chega ao instalador). Projeto **novo** termina aqui: nasce verde.
+**A infraestrutura entra por ferramenta, não por checklist**: `scripts/casa-init <destino>` (do repo `casa-standard`) instala e atualiza validador, templates, router (se ausente), a ponte `CLAUDE.md` (se ausente; ADR-0009), as skills do ciclo em T1 (ADR-0017), o gate do §3 e — em remote GitHub — o `casa-update-check` agendado (ADR-0016: detecção de contrato desatualizado **fora do gate**, com aviso mantido como issue no tracker) em qualquer estado de repo — vazio, novo, legado, com docs ADR/SDD pré-existentes. Aditivo e idempotente: nunca toca conteúdo do repo, e rodar de novo atualiza a toolchain (`casa-standard-ref` diz de qual snapshot ela veio; `casa-version` diz o contrato). Sem clonar: `curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <destino>` baixa o repo num temporário e roda o mesmo `casa-init` (pinável com `… | CASA_REF=<tag|sha> sh -s -- <destino>` — a variável é do `sh`; prefixada ao `curl`, não chega ao instalador). Projeto **novo** termina aqui: nasce verde.
 
 Repo **existente**: o `casa-init` instala a base e o `docs-check` relata o que falta; a migração de **conteúdo** exige julgamento e segue incremental, nesta ordem: (1) **limpar a árvore** — os duplicados saem antes de qualquer outra coisa, é o gate mais barato e de maior efeito; (2) preencher o `AGENTS.md` router (pode parar aqui em T0); (3) declarar o tier; (4) extrair capítulos de contexto do que hoje está espalhado (convenções do README de specs → `CONVENTIONS.md`); (5) frontmatter mínimo nos docs existentes — doc tocado, doc migrado; status legado migra pelo estado **real verificado** (spec só vira `implemented` se a implementação está no ar), nunca por rename mecânico; template antigo em pasta de docs vai para `docs/templates/`; referência a conceito fora do padrão ou vira campo registrado (ADR do repo, §6) ou é removida; ADRs já emendados inline ganham `VERDADE ATUAL` apontando para a verdade, sem reescrever histórico; (6) `docs-check --warn-only` enquanto o repo ainda não passa limpo — assim que passar sem a flag, o gate vale imediatamente (o gate em si — CI ou hook — o `casa-init` já instalou).
 
@@ -226,6 +230,7 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `docs/templates/adr.template.md` — MADR 4.0 + Confirmação + VERDADE ATUAL
 - `docs/templates/spec.template.md` — Spec com DoD, EARS e fechamento (Verificação)
 - `docs/templates/context.TESTS.template.md` — capítulo de contexto reconhecido (TESTS; §4/§8)
+- `docs/templates/skills/casa-*/SKILL.md` — o ciclo do §9 como Agent Skills (ADR-0017, SPEC-0010)
 - `scripts/docs-check` — valida frontmatter, grafo e higiene; regenera índices (§8)
 - `scripts/docs-reserve` — reserva NNNN e cria ADR/Spec do template (§5; ADR-0013, SPEC-0007)
 - `scripts/test-docs-check` — cenários de regressão do validador (SPEC-0003)

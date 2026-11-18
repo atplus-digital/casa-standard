@@ -77,4 +77,5 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
 - Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título"` (ADR-0013)
 - Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
+- Skills do ciclo distribuídas ao adotante: `docs/templates/skills/casa-*` (ADR-0017, SPEC-0010)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`

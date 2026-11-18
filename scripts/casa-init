@@ -16,6 +16,9 @@ Aditivo e idempotente:
     repo (ADR-0010) — inserida só se ausente, nunca alterada. CLAUDE.md (ponte de
     host, ADR-0009) é criado do template só se ausente; existente nunca é tocado
     (AVISO se falta @AGENTS.md).
+  - Skills do ciclo (ADR-0017, só T1): casa-explore/propose/apply/verify/close em
+    .agents/skills/ e .claude/skills/ — da toolchain, atualizadas quando divergem; skill
+    do repo com outro nome nunca é tocada.
   - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente, com o branch
     padrão do repo; existente e divergente do template → AVISO, nunca sobrescrito);
     sem remote ou host sem adaptador de CI → pre-commit hook no diretório de hooks
@@ -50,6 +53,11 @@ TOOLCHAIN = [
 # Pontes por host (ADR-0009) — conjunto FECHADO: host de agente que não lê AGENTS.md
 # recebe um arquivo-ponte que importa o router. Host novo entra por ADR, nunca ad-hoc.
 HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
+# Skills do ciclo de entrega (ADR-0017): da TOOLCHAIN — casa-* atualizadas quando divergem;
+# skill do repo com outro nome nunca é tocada. Diretórios em conjunto FECHADO: a convenção
+# entre clientes (.agents/skills) + a do host que não a lê (Claude Code). Novo = ADR.
+SKILLS = ["casa-explore", "casa-propose", "casa-apply", "casa-verify", "casa-close"]
+SKILL_DIRS = [".agents/skills", ".claude/skills"]
 # Workflows instalados quando o remote é GitHub (ADR-0006): gate + update-check (ADR-0016).
 GITHUB_WORKFLOWS = [
     ("docs/templates/docs-check.workflow.yml", ".github/workflows/docs-check.yml",
@@ -215,6 +223,29 @@ def main():
     else:
         say("AVISO", f"{shim_name} existe sem `{shim_marker}` — o Claude Code não carrega "
                      f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
+
+    # 2c. Skills do ciclo (ADR-0017) — só em T1: T0 não tem ADR/Spec para o ciclo operar.
+    tier = re.search(r"^casa-tier:\s*(T\d)", router.read_text(encoding="utf-8"), re.M)
+    if tier and tier.group(1) == "T0":
+        say("ignorado", "skills do ciclo (casa-*): repo T0 não usa ADR/Spec (ADR-0017)")
+    else:
+        for base in SKILL_DIRS:
+            count = {"criado": 0, "atualizado": 0, "em dia": 0}
+            for name in SKILLS:
+                data = (SRC / "docs/templates/skills" / name / "SKILL.md").read_bytes()
+                dest = target / base / name / "SKILL.md"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if not dest.exists():
+                    count["criado"] += 1
+                elif dest.read_bytes() != data:
+                    count["atualizado"] += 1
+                else:
+                    count["em dia"] += 1
+                    continue
+                dest.write_bytes(data)  # bytes: preserva LF no Windows
+            tag = next((k for k in ("criado", "atualizado") if count[k]), "em dia")
+            detail = ", ".join(f"{v} {k}" for k, v in count.items() if v)
+            say(tag, f"{base}/casa-* (skills do ciclo, ADR-0017: {detail})")
 
     # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
     r = sh(["git", "-C", str(target), "rev-parse", "--show-toplevel"])
