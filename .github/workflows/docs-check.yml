@@ -21,7 +21,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Validar docs (CASA Standard §8)
-        run: python3 scripts/docs-check --check-adr-immutability --base-ref origin/main
+        env:
+          # PR: compara com o branch de destino; push: com o commit anterior ao push.
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if git rev-parse -q --verify "${BASE}^{commit}" >/dev/null; then
+            python3 scripts/docs-check --check-adr-immutability --base-ref "$BASE"
+          else
+            echo "::notice::sem base comparável ('${BASE}': primeiro push ou force-push) — imutabilidade de ADR não verificada neste evento"
+            python3 scripts/docs-check
+          fi
       - name: Testar validador docs-check (SPEC-0003)
         run: bash scripts/test-docs-check
       - name: Testar bootstrap casa-init (SPEC-0001)

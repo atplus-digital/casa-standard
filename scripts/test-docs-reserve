@@ -101,6 +101,15 @@ python3 "$RESERVE" adr "Primeira decisão" --root "$R" >/dev/null 2>&1
 python3 "$RESERVE" spec "Primeiro comportamento" --root "$R" >/dev/null 2>&1
 ck "SPEC-0007/9: docs-check verde após reservas"  '(cd "$R" && python3 scripts/docs-check)'
 
+# SPEC-0009/19 — spec: o título vai para o H1 do corpo; o frontmatter fica intacto
+mkr
+python3 "$RESERVE" spec "Login com SSO" --root "$R" >/dev/null 2>&1
+F="$R/docs/specs/0001-login-com-sso.md"
+ck "SPEC-0009/19: H1 da spec recebe o título"      'grep -q "^# Login com SSO$" "$F"'
+ck "SPEC-0009/19: H1 placeholder não sobra"        '! grep -q "^# <comportamento" "$F"'
+ck "SPEC-0009/19: comentário do frontmatter intacto" 'grep -q "^# design-ref: <url-ou-path>" "$F"'
+ck "SPEC-0009/19: índice publica o título"         'grep -q "| Login com SSO |" "$R/docs/specs/README.md"'
+
 echo
 echo "==== $pass PASS / $fail FAIL ===="
 [ "$fail" -eq 0 ]

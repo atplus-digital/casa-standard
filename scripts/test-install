@@ -55,6 +55,10 @@ ck "EARS-4: nada escrito no destino"                    '[ ! -e "$F/AGENTS.md" ]
 ck "EARS-5: corpo em main(), chamada na última linha"   '[ "$(tail -1 "$SH")" = "main \"\$@\"" ]'
 ck "sintaxe POSIX sh válida (sh -n)"                    'sh -n "$SH"'
 
+# SPEC-0009/21 — a pinagem documentada passa CASA_REF ao sh (prefixada ao curl, não chega)
+ck "SPEC-0009/21: README pina com | CASA_REF=… sh"   'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/README.md"'
+ck "SPEC-0009/21: STANDARD pina com | CASA_REF=… sh" 'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/STANDARD.md"'
+
 echo
 echo "==== $pass PASS / $fail FAIL ===="
 [ "$fail" -eq 0 ]

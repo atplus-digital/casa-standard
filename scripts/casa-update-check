@@ -15,8 +15,11 @@ LABEL="casa-update"
 SOURCE_URL="${CASA_SOURCE_URL:-https://raw.githubusercontent.com/atplus-digital/casa-standard/main/CHANGELOG.md}"
 
 [ -d "$ROOT" ] || { echo "casa-update-check: root inexistente: $ROOT"; exit 2; }
+# O gh descobre o repositório pelo checkout do diretório corrente: opera SEMPRE no root
+# lido — nunca no checkout de onde o comando foi chamado.
+cd "$ROOT" || exit 2
 
-declared=$(sed -n 's/^casa-version: *\([0-9][0-9.]*\).*/\1/p' "$ROOT/AGENTS.md" 2>/dev/null | head -1)
+declared=$(sed -n 's/^casa-version: *\([0-9][0-9.]*\).*/\1/p' AGENTS.md 2>/dev/null | head -1)
 if [ -z "$declared" ]; then
     echo "casa-version ilegível em AGENTS.md — o docs-check é quem cobra o router; nada a fazer."
     exit 0
@@ -33,9 +36,16 @@ newer=$(printf '%s\n%s\n' "$declared" "$latest" | sort -V | tail -1)
 
 if [ "$declared" = "$latest" ] || [ "$newer" = "$declared" ]; then
     # em dia (ou à frente — julgar não é papel deste job): fecha aviso aberto, se houver
-    for n in $(gh issue list --label "$LABEL" --state open --json number --jq '.[].number' 2>/dev/null); do
-        gh issue close "$n" --comment "Contrato em dia ($declared). Fechado pelo casa-update-check." \
-            && echo "issue #$n fechada (repo alcançou o contrato vigente)."
+    open_issues=$(gh issue list --label "$LABEL" --state open --json number --jq '.[].number' 2>/dev/null) || {
+        echo "não consegui consultar as issues '$LABEL' (gh autenticado? issues habilitadas?) — tento na próxima janela."
+        exit 0
+    }
+    for n in $open_issues; do
+        if gh issue close "$n" --comment "Contrato em dia ($declared). Fechado pelo casa-update-check." >/dev/null 2>&1; then
+            echo "issue #$n fechada (repo alcançou o contrato vigente)."
+        else
+            echo "falha ao fechar a issue #$n — tento na próxima janela."
+        fi
     done
     echo "em dia."
     exit 0
@@ -51,12 +61,22 @@ BODY="O contrato CASA vigente é **$latest** e este repo declara **casa-version:
 _Aviso automático do casa-update-check (ADR-0016 do casa-standard). Esta issue é editada enquanto o repo estiver atrás e fecha sozinha quando alcançar._"
 
 gh label create "$LABEL" --color BFD4F2 --description "aviso automático do casa-update-check (ADR-0016)" 2>/dev/null || true
-existing=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number' 2>/dev/null)
+# Falha na consulta NÃO é "nenhuma issue": criar às cegas duplicaria o aviso.
+existing=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number' 2>/dev/null) || {
+    echo "não consegui consultar as issues '$LABEL' (gh autenticado? issues habilitadas?) — não crio às cegas; tento na próxima janela."
+    exit 0
+}
 if [ -n "$existing" ]; then
-    gh issue edit "$existing" --title "$TITLE" --body "$BODY" >/dev/null 2>&1 \
-        && echo "issue #$existing atualizada: $TITLE"
+    if gh issue edit "$existing" --title "$TITLE" --body "$BODY" >/dev/null 2>&1; then
+        echo "issue #$existing atualizada: $TITLE"
+    else
+        echo "falha ao editar a issue #$existing (permissão issues: write?) — tento na próxima janela."
+    fi
 else
-    gh issue create --title "$TITLE" --body "$BODY" --label "$LABEL" 2>/dev/null \
-        && echo "issue criada: $TITLE"
+    if gh issue create --title "$TITLE" --body "$BODY" --label "$LABEL" >/dev/null 2>&1; then
+        echo "issue criada: $TITLE"
+    else
+        echo "falha ao criar a issue (permissão issues: write? issues habilitadas?) — tento na próxima janela."
+    fi
 fi
 exit 0

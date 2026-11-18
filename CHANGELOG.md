@@ -1,5 +1,32 @@
 # Changelog
 
+## Toolchain — 2026-11-18 (contrato inalterado: CASA 1.8)
+
+Correções de confiabilidade do gate (SPEC-0009). O contrato não muda — a toolchain passa a
+cumprir o que o STANDARD já prometia —, então `casa-version` fica em 1.8 e nenhum adotante
+recebe aviso de contrato. Para receber: rode o `casa-init` de novo (atualiza
+`casa-standard-ref`) e compare o seu `.github/workflows/docs-check.yml` com o template — o
+`casa-init` avisa a divergência, mas nunca sobrescreve o workflow.
+
+- **Imutabilidade de ADR** sem brechas: compara pelo número contra a merge-base (renomear não
+  esconde edição), exclusão de ADR aceito e regressão de status são erro, e o bloco
+  `VERDADE ATUAL` só é isento no topo e com até 3 linhas.
+- **Gate local** valida o index (`docs-check --staged`), é instalado no diretório de hooks
+  efetivo (`core.hooksPath`, worktree) e nunca no repo pai de uma subpasta.
+- **Workflow** compara com o branch de destino do PR / o commit anterior do push (antes:
+  `origin/main` fixo, que quebrava em repo `master`), com `permissions: contents: read`.
+- **Router**: comentário HTML não conta como DoD/comando; placeholder no DoD global e no
+  `TESTS.md` é erro; link markdown também é ponteiro; o template nasce com
+  `python3 scripts/docs-check` no DoD (antes: `npm` de exemplo) e o exemplo antigo vira aviso.
+- **Frontmatter**: chave duplicada, status vazio e status em lista viram erro (antes: silêncio
+  ou traceback); `builds-on` autorreferente é erro; `<Tag>` entre aspas não é placeholder.
+- **Higiene** segue o git: arquivo ignorado pelo `.gitignore` não reprova.
+- `docs-reserve spec` volta a pôr o título no H1 (quebrado desde a 1.7);
+  `casa-update-check` opera no root lido e não cria issue duplicada quando a consulta falha.
+- Pinagem: a variável vai para o `sh` — `curl … | CASA_REF=<ref> sh -s -- <destino>`.
+- **Pode revelar erros antes silenciosos** num adotante (chave duplicada, ponteiro em link
+  quebrado, DoD comentado). São problemas reais; corrija-os ou use `--warn-only` na janela.
+
 ## CASA 1.8 — 2026-07-06
 
 - **Detecção agendada de contrato desatualizado, fora do gate** (ADR-0016, SPEC-0008):

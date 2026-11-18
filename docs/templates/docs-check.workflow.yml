@@ -1,11 +1,16 @@
 # Gate de CI do CASA Standard (§3/§8) — instalado pelo casa-init em
 # .github/workflows/docs-check.yml quando o repo tem remote do GitHub (ADR-0006).
+# O casa-init troca `branches: [main]` pelo branch padrão do repo. Para o gate valer de
+# fato, marque o check `docs-check` como obrigatório na proteção desse branch.
 name: docs-check
 
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   docs-check:
@@ -14,8 +19,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Validar docs (CASA Standard §8)
-        run: python3 scripts/docs-check --check-adr-immutability --base-ref origin/main
+        env:
+          # PR: compara com o branch de destino; push: com o commit anterior ao push.
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if git rev-parse -q --verify "${BASE}^{commit}" >/dev/null; then
+            python3 scripts/docs-check --check-adr-immutability --base-ref "$BASE"
+          else
+            echo "::notice::sem base comparável ('${BASE}': primeiro push ou force-push) — imutabilidade de ADR não verificada neste evento"
+            python3 scripts/docs-check
+          fi

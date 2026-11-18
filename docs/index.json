@@ -330,5 +330,35 @@
       "docs/templates/casa-update-check.workflow.yml",
       "scripts/casa-init"
     ]
+  },
+  {
+    "id": "SPEC-0009",
+    "path": "docs/specs/0009-gate-confiavel-hook-ci-e-imutabilidade-validam-o-que-de-fato-entra.md",
+    "layer": "specs",
+    "title": "Gate confiável: hook, CI e imutabilidade validam o que de fato entra",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0006",
+      "ADR-0007",
+      "ADR-0010",
+      "ADR-0013",
+      "ADR-0016"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "scripts/docs-check",
+      "scripts/pre-commit",
+      "scripts/casa-init",
+      "scripts/docs-reserve",
+      "scripts/casa-update-check",
+      "docs/templates/docs-check.workflow.yml",
+      "docs/templates/AGENTS.template.md",
+      ".github/workflows/docs-check.yml",
+      "scripts/test-docs-check",
+      "scripts/test-casa-init",
+      "scripts/test-docs-reserve",
+      "scripts/test-update-check",
+      "scripts/test-install"
+    ]
   }
 ]

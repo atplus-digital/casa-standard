@@ -112,6 +112,52 @@ ck "EARS-5: sem .git orienta e não instala gate"     'echo "$OUT" | grep -q "se
 # EARS 2 — destino = casa-standard
 ck "EARS-2: auto-destino abortado com exit != 0"     '! python3 "$INIT" "$ROOT"'
 
+# --- SPEC-0009: gate confiável ---
+gitrepo() { D="$(mktemp -d)/$1"; mkdir -p "$D"; git init -q -b "${2:-main}" "$D";
+            git -C "$D" config user.email casa@example.invalid; git -C "$D" config user.name CASA; }
+
+# SPEC-0009/1 — DoD do router novo é o gate real, não comando de exemplo
+A9="$(mktemp -d)/novo"; python3 "$INIT" "$A9" --repo-id app >/dev/null
+ck "SPEC-0009/1: DoD do router novo roda o docs-check" \
+   'sed -n "/^## Como validar/,/^## /p" "$A9/AGENTS.md" | grep -q "^python3 scripts/docs-check"'
+ck "SPEC-0009/1: DoD do router novo sem npm de exemplo" \
+   '! sed -n "/^## Como validar/,/^## /p" "$A9/AGENTS.md" | grep -q "^npm"'
+
+# SPEC-0009/15 — core.hooksPath: hook vai para o diretório que o git executa
+gitrepo hp; git -C "$D" config core.hooksPath .githooks
+OUT=$(python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0009/15: hook instalado no core.hooksPath" '[ -e "$D/.githooks/pre-commit" ] && [ ! -e "$D/.git/hooks/pre-commit" ]'
+
+# SPEC-0009/16 — worktree: hook no diretório comum, como cópia; checkout sem toolchain segue livre
+gitrepo wtmain; git -C "$D" commit -q --allow-empty -m i; MAIN="$D"
+WT="$(mktemp -d)/wt"; git -C "$MAIN" worktree add -q "$WT" -b feat
+python3 "$INIT" "$WT" >/dev/null 2>&1
+ck "SPEC-0009/16: hook do worktree no diretório comum" '[ -f "$MAIN/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/16: hook comum é cópia, não link para um worktree" '[ ! -L "$MAIN/.git/hooks/pre-commit" ]'
+echo x > "$MAIN/x.txt"; git -C "$MAIN" add x.txt
+ck "SPEC-0009/16: checkout sem toolchain não é bloqueado" 'git -C "$MAIN" commit -q -m x'
+
+# SPEC-0009/17 — destino é subpasta de outro repo: não instala gate no repo pai
+gitrepo pai; echo x > "$D/f"; git -C "$D" add f; git -C "$D" commit -q -m i
+OUT=$(python3 "$INIT" "$D/sub" 2>&1)
+ck "SPEC-0009/17: subpasta não instala hook no repo pai" '[ ! -e "$D/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/17: AVISO orienta" 'echo "$OUT" | grep -q "AVISO.*sem ser a raiz"'
+echo y >> "$D/f"; git -C "$D" add f
+ck "SPEC-0009/17: repo pai segue commitando" 'git -C "$D" commit -q -m y'
+
+# SPEC-0009/18 — GitHub com branch padrão master; workflow divergente gera AVISO
+gitrepo ghm master; git -C "$D" remote add origin git@github.com:acme/app.git
+git -C "$D" commit -q --allow-empty -m i
+OUT=$(python3 "$INIT" "$D" 2>&1)
+WF="$D/.github/workflows/docs-check.yml"
+ck "SPEC-0009/18: push no branch padrão real" 'grep -q "branches: \[master\]" "$WF"'
+ck "SPEC-0009/18: base de comparação vem do evento" 'grep -q "github.base_ref" "$WF" && grep -q "github.event.before" "$WF"'
+ck "SPEC-0009/18: nota de check obrigatório" 'echo "$OUT" | grep -q "OBRIGATÓRIO na proteção do branch master"'
+echo "# customizado" >> "$WF"
+OUT=$(python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0009/18: workflow divergente gera AVISO e é preservado" \
+   'echo "$OUT" | grep -q "AVISO.*difere do template" && grep -q "customizado" "$WF"'
+
 echo
 echo "==== $pass PASS / $fail FAIL ===="
 [ "$fail" -eq 0 ]

@@ -16,9 +16,12 @@ Aditivo e idempotente:
     repo (ADR-0010) — inserida só se ausente, nunca alterada. CLAUDE.md (ponte de
     host, ADR-0009) é criado do template só se ausente; existente nunca é tocado
     (AVISO se falta @AGENTS.md).
-  - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente);
-    sem remote ou host sem adaptador de CI → pre-commit hook, com AVISO
-    quando há remote (hook alheio não é tocado); sem .git → orienta.
+  - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente, com o branch
+    padrão do repo; existente e divergente do template → AVISO, nunca sobrescrito);
+    sem remote ou host sem adaptador de CI → pre-commit hook no diretório de hooks
+    EFETIVO do git (core.hooksPath, worktree), com AVISO quando há remote (hook alheio
+    não é tocado); sem .git → orienta; destino dentro de outro repo sem ser a raiz →
+    não instala gate (hook e CI valem para a raiz) e orienta.
   - Diagnóstico: roda o docs-check do destino ao final e relata. Migração de
     conteúdo legado é trabalho humano (STANDARD §10), não deste script.
 
@@ -74,6 +77,25 @@ def remote_host(url):
     if not m:
         m = re.match(r"^(?:[^@/]+@)?([^:/]+):", url)
     return m.group(1).lower() if m else ""
+
+
+def default_branch(target):
+    """Branch padrão do repo, para o gatilho `push` do workflow. Nunca o branch corrente
+    (pode ser o de feature em que a adoção está sendo feita)."""
+    r = sh(["git", "-C", str(target), "symbolic-ref", "--quiet", "--short",
+            "refs/remotes/origin/HEAD"])
+    if r.returncode == 0 and "/" in r.stdout.strip():
+        return r.stdout.strip().split("/", 1)[1]
+    for ref in ("refs/remotes/origin/main", "refs/remotes/origin/master",
+                "refs/heads/main", "refs/heads/master"):
+        if sh(["git", "-C", str(target), "rev-parse", "--verify", "--quiet", ref]).returncode == 0:
+            return ref.rsplit("/", 1)[1]
+    return "main"
+
+
+def render_workflow(tpl_text, branch):
+    """O template traz `branches: [main]`; o repo recebe o seu branch padrão."""
+    return tpl_text.replace("    branches: [main]\n", f"    branches: [{branch}]\n", 1)
 
 
 def src_ref():
@@ -195,30 +217,51 @@ def main():
                      f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
 
     # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
-    r = sh(["git", "-C", str(target), "rev-parse", "--git-dir"])
+    r = sh(["git", "-C", str(target), "rev-parse", "--show-toplevel"])
     if r.returncode != 0:
         say("AVISO", "sem .git: gate não instalado — rode `git init` e casa-init de novo (STANDARD §3)")
+    elif Path(r.stdout.strip()).resolve() != target:
+        # O git achou um repo ANCESTRAL: hook e workflow valem para a raiz dele, onde não há
+        # router nem validador — instalar ali quebraria os commits do repo pai.
+        say("AVISO", f"destino está dentro do repo {r.stdout.strip()} sem ser a raiz: gate não "
+                     "instalado (hook e CI valem para a raiz) — rode `git init` no destino, ou "
+                     "o casa-init na raiz do repo (STANDARD §3)")
     else:
-        gd = Path(r.stdout.strip())
-        gitdir = gd if gd.is_absolute() else (target / gd)
         urls = [ln.split(None, 1)[1]
                 for ln in sh(["git", "-C", str(target), "config", "--get-regexp",
                               r"^remote\..*\.url$"]).stdout.splitlines() if " " in ln]
         if any(remote_host(u) == "github.com" for u in urls):
+            branch = default_branch(target)
             for tpl, dest, label in GITHUB_WORKFLOWS:
                 wf = target / dest
-                if wf.exists():
-                    say("preservado", f"{dest} (workflow é do repo)")
-                else:
+                content = render_workflow((SRC / tpl).read_text(encoding="utf-8"), branch)
+                if not wf.exists():
                     wf.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(SRC / tpl, wf)
-                    say("criado", f"{dest} ({label})")
+                    wf.write_bytes(content.encode("utf-8"))  # preserva LF no Windows
+                    extra = f"; branch padrão: {branch}" if "branches:" in content else ""
+                    say("criado", f"{dest} ({label}{extra})")
+                elif wf.read_text(encoding="utf-8") == content:
+                    say("em dia", dest)
+                else:
+                    # O workflow é do repo (pode ter sido customizado) — nunca sobrescrito; mas
+                    # correção do template não chega sozinha: o adotante precisa saber.
+                    say("AVISO", f"{dest} difere do template desta versão — compare com {tpl} "
+                                 "e incorpore o que fizer sentido (o casa-init não sobrescreve)")
+            say("nota", f"marque o check `docs-check` como OBRIGATÓRIO na proteção do branch "
+                        f"{branch} — sem isso o CI avisa, mas não bloqueia o merge (STANDARD §3)")
         else:
             if urls:
                 say("AVISO", f"remote sem adaptador de CI ({remote_host(urls[0]) or urls[0]}): "
                              "gate local via pre-commit hook (ADR-0006) — integre "
                              "`scripts/docs-check` ao CI do seu host")
-            hook = gitdir / "hooks" / "pre-commit"
+            # Diretório de hooks EFETIVO: respeita core.hooksPath e, em worktree, o diretório
+            # comum — .git/hooks fixo instalaria um hook que o git nunca executa.
+            hp = Path(sh(["git", "-C", str(target), "rev-parse", "--git-path",
+                          "hooks/pre-commit"]).stdout.strip())
+            hook = hp if hp.is_absolute() else (target / hp)
+            hooks_cfg = sh(["git", "-C", str(target), "config", "--get", "core.hooksPath"]).stdout.strip()
+            if hooks_cfg:
+                say("nota", f"core.hooksPath={hooks_cfg}: o hook vai para o diretório configurado")
             ours = target / "scripts" / "pre-commit"
             if hook.exists() or hook.is_symlink():
                 try:
@@ -226,18 +269,24 @@ def main():
                 except OSError:
                     same = False
                 if same:
-                    say("em dia", ".git/hooks/pre-commit (gate: local)")
+                    say("em dia", f"{os.path.relpath(hook, target)} (gate: local)")
                 else:
                     say("AVISO", f"{hook} existe e não é o do CASA — não toco; "
                                  "integre `scripts/docs-check` a ele")
             else:
                 hook.parent.mkdir(parents=True, exist_ok=True)
+                # Symlink só quando o hook mora dentro deste checkout; num worktree o diretório
+                # de hooks é COMUM a todos os checkouts — vai cópia, que resolve o validador
+                # pelo toplevel de quem commita (e um link para outro worktree apodreceria).
+                inside = target in hook.parent.resolve().parents
                 try:
+                    if not inside:
+                        raise OSError
                     hook.symlink_to(os.path.relpath(ours, hook.parent))
                 except OSError:
                     shutil.copy2(ours, hook)
                     hook.chmod(0o755)
-                say("criado", ".git/hooks/pre-commit → scripts/pre-commit (gate: local, ADR-0006)")
+                say("criado", f"{os.path.relpath(hook, target)} → scripts/pre-commit (gate: local, ADR-0006)")
 
     # 4. Diagnóstico — migração de conteúdo é humana (§10)
     print()

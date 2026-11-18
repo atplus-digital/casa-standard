@@ -156,7 +156,14 @@ def main():
     if "date: AAAA-MM-DD" not in text:
         print("AVISO: template sem placeholder 'date: AAAA-MM-DD' — confira a data no doc criado.")
     text = text.replace("date: AAAA-MM-DD", f"date: {today}", 1)
-    text = re.sub(r"^# .*$", lambda m: f"# {args.titulo}", text, count=1, flags=re.M)
+    # H1 = primeira linha '# ' do CORPO: no frontmatter, '# ' é comentário YAML (o template
+    # de spec traz '# design-ref: …') e não pode receber o título.
+    fm_end = re.search(r"\A---\n.*?\n---\n", text, flags=re.S)
+    head, body = (text[:fm_end.end()], text[fm_end.end():]) if fm_end else ("", text)
+    body, n = re.subn(r"^# .*$", lambda m: f"# {args.titulo}", body, count=1, flags=re.M)
+    if not n:
+        print("AVISO: template sem H1 ('# …') no corpo — o title derivado ficará ausente.")
+    text = head + body
 
     # Ledger: cria arquivo/seção se ausentes; nova row entra no fim da tabela da seção.
     if not lines:
