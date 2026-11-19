@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: <nome-canonico-do-repo>   # usado em referências cross-repo (repo:ADR-0001)
 casa-tier: T1                            # T0 (leve) | T1 (padrão) — STANDARD §3
-casa-version: 1.8                        # versão do contrato CASA adotado (promessa do repo, ADR-0010)
+casa-version: 1.9                        # versão do contrato CASA adotado (promessa do repo, ADR-0010)
 casa-standard-ref: <sha>                 # versão do casa-standard de origem — o casa-init carimba
 ```
 
@@ -28,9 +28,12 @@ casa-standard-ref: <sha>                 # versão do casa-standard de origem �
 
 ## Como validar (DoD global do repo)
 ```bash
-npm run typecheck        # exit 0
-npm test                 # tudo verde
+python3 scripts/docs-check   # exit 0 — gate CASA (STANDARD §8)
 ```
+<!-- Acrescente ao bloco acima os comandos REAIS de build/teste deste repo, com critério
+     binário no comentário (ex.: `pytest -q   # exit 0`). Comando de exemplo que o repo
+     não tem passa no docs-check e mente (STANDARD §7). -->
+
 
 ## Como deployar
 <!-- Ferramenta/script oficial, ordem, e o que NÃO fazer. -->

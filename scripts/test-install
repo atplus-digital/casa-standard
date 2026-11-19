@@ -4,6 +4,8 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SH="$ROOT/install.sh"
+# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
+GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
@@ -54,6 +56,10 @@ ck "EARS-4: nada escrito no destino"                    '[ ! -e "$F/AGENTS.md" ]
 # EARS 5 — proteção estrutural contra download truncado
 ck "EARS-5: corpo em main(), chamada na última linha"   '[ "$(tail -1 "$SH")" = "main \"\$@\"" ]'
 ck "sintaxe POSIX sh válida (sh -n)"                    'sh -n "$SH"'
+
+# SPEC-0009/21 — a pinagem documentada passa CASA_REF ao sh (prefixada ao curl, não chega)
+ck "SPEC-0009/21: README pina com | CASA_REF=… sh"   'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/README.md"'
+ck "SPEC-0009/21: STANDARD pina com | CASA_REF=… sh" 'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/STANDARD.md"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

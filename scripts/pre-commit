@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
-# Gate local do CASA Standard (STANDARD §3, ADR-0001) para repo sem remote/CI.
-# Instalação, a partir da raiz do repo:
-#   ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
-# Contornar exige ato deliberado (git commit --no-verify) — e é assim que deve ser.
+# Gate local do CASA Standard (STANDARD §3, ADR-0006) para repo sem CI com adaptador.
+# (A frase acima é o marcador pelo qual o casa-init reconhece e atualiza este hook.)
+# Instalado pelo casa-init no diretório de hooks do repo (respeita core.hooksPath local e
+# worktrees). Valida o INDEX — o que vai entrar no commit —, não a working tree.
+# Contornar exige ato deliberado (git commit --no-verify). Duas exceções, porque os hooks
+# são comuns a todos os worktrees: checkout sem toolchain (branch anterior à adoção) não
+# é bloqueado, e validador anterior ao --staged roda no modo dele, sobre o disco.
 set -euo pipefail
-exec python3 "$(git rev-parse --show-toplevel)/scripts/docs-check"
+top="$(git rev-parse --show-toplevel)"
+dc="$top/scripts/docs-check"
+if [ ! -f "$dc" ]; then
+    echo "pre-commit CASA: scripts/docs-check ausente neste checkout — gate não se aplica aqui." >&2
+    exit 0
+fi
+if grep -q -- '"--staged"' "$dc"; then
+    exec python3 "$dc" --staged --root "$top"
+fi
+echo "pre-commit CASA: o docs-check deste checkout é anterior ao --staged — validando o disco (rode o casa-init neste branch)." >&2
+exec python3 "$dc" --root "$top"

@@ -3,6 +3,8 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UC="$ROOT/scripts/casa-update-check"
+# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
+GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
@@ -12,8 +14,9 @@ STUB="$(mktemp -d)"
 cat > "$STUB/gh" <<'EOF'
 #!/bin/sh
 echo "gh $*" >> "$GH_LOG"
+echo "cwd=$(pwd)" >> "$GH_LOG"
 case "$1 $2" in
-  "issue list") cat "${GH_LIST:-/dev/null}" 2>/dev/null ;;
+  "issue list") [ "${GH_LIST_FAIL:-0}" = "1" ] && exit 1; cat "${GH_LIST:-/dev/null}" 2>/dev/null ;;
 esac
 exit 0
 EOF
@@ -78,6 +81,19 @@ ck "SPEC-0008/5: router ilegível sai 0 com log"    '[ "$RC" -eq 0 ] && echo "$O
 mkrepo 99.9
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
 ck "SPEC-0008/6: à frente não cria issue"          '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
+
+# SPEC-0009/20 — falha ao consultar issues não é "nenhuma issue": não cria duplicata
+mkrepo 1.1
+GH_LIST_FAIL=1; export GH_LIST_FAIL
+OUT=$(sh "$UC" "$R" 2>&1); RC=$?
+ck "SPEC-0009/20: consulta falha → não cria issue" '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0009/20: consulta falha → log explica"   'echo "$OUT" | grep -q "não consegui consultar"'
+unset GH_LIST_FAIL
+
+# SPEC-0009/20b — gh opera no root informado, não no diretório de quem chamou
+mkrepo 1.1
+OUT=$(cd "$(mktemp -d)" && sh "$UC" "$R" 2>&1)
+ck "SPEC-0009/20b: gh roda no root lido"          'grep -q "^cwd=$R$" "$GH_LOG"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

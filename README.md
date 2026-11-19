@@ -28,7 +28,7 @@ Projeto novo ou repo existente — o bootstrap é o mesmo ([STANDARD.md §10](ST
 curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <caminho-do-seu-repo> --repo-id <nome>
 ```
 
-Sem argumentos, aplica no diretório corrente. Para pinar uma versão: `CASA_REF=<tag|sha>` antes do comando. Se preferir auditar antes de executar (recomendado na primeira vez):
+Sem argumentos, aplica no diretório corrente. Para pinar uma versão, a variável vai para o `sh`, não para o `curl` — `curl -fsSL …/install.sh | CASA_REF=<tag|sha> sh -s -- <caminho> --repo-id <nome>` (prefixada ao `curl`, ela não chega ao instalador, que baixa `main`). Se preferir auditar antes de executar (recomendado na primeira vez):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh
@@ -50,7 +50,7 @@ python3 scripts/docs-check --warn-only   # imprime tudo e sai 0 (só na janela d
 
 ## Status
 
-CASA `1.1`, `accepted` desde 2026-06-13. Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
+Versão vigente do contrato: cabeçalho do [STANDARD.md](STANDARD.md) e [CHANGELOG.md](CHANGELOG.md) — não repetida aqui (Princípio 2: um fato mora num arquivo só). Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
 
 ## Licença
 

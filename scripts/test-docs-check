@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0003 e SPEC-0004 (docs-check). DoD: exit 0 = todos verdes.
+# Cenários das SPEC-0003, 0004, 0006 e 0009 (docs-check). DoD: exit 0 = todos verdes.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
 INIT="$ROOT/scripts/casa-init"
 # Versão de contrato derivada da constante do validador (nunca hardcodada no fixture).
 DC_V="$(sed -n 's/^CONTRACT_VERSION = "\(.*\)"$/\1/p' "$CHECK")"
+# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
+GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
@@ -316,6 +318,227 @@ python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1)
 ck "ADR-0014: campo desconhecido continua avisando" \
    'echo "$OUT" | grep -q "fora do vocabulário"'
+
+# --- SPEC-0009: gate confiável ---
+
+gitify() { # transforma o fixture atual em repo git com um commit base
+    (cd "$R" && git init -q -b main && git config user.email casa@example.invalid &&
+     git config user.name CASA && python3 "$CHECK" --emit-index >/dev/null &&
+     git add -A && git commit -q -m base)
+}
+commit_all() { (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add -A && git commit -q -m "$1"); }
+set_dod() { # troca o bloco do DoD global do router pelo conteúdo de $1 (arquivo)
+    python3 - "$R/AGENTS.md" "$1" <<'EOF'
+import re, sys
+p, blk = sys.argv[1], open(sys.argv[2]).read()
+t = open(p).read()
+t = re.sub(r"(## Como validar \(DoD global do repo\)\n\n)```bash\n.*?\n```\n", lambda m: m.group(1) + blk, t, flags=re.S)
+open(p, "w").write(t)
+EOF
+}
+
+# SPEC-0009/2 — DoD de exemplo do template antigo → AVISO
+mkrepo
+printf '```bash\nnpm run typecheck        # exit 0\nnpm test                 # tudo verde\n```\n' > "$R/dod"; set_dod "$R/dod"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/2: DoD de exemplo do template avisa" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*exemplo do template"'
+
+# SPEC-0009/3 — DoD global só dentro de comentário HTML → erro
+mkrepo
+printf '<!--\n```bash\nmake test\n```\n-->\n' > "$R/dod"; set_dod "$R/dod"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/3: DoD global comentado falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "DoD global sem linha executável"'
+
+# SPEC-0009/3b — TESTS.md cujo único comando está comentado → erro
+mkrepo
+decl_tests "docs/context/TESTS.md"
+printf '# Testes\n<!--\n```bash\nnpm test\n```\n-->\n' > "$R/docs/context/TESTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/3b: TESTS.md com comando só em comentário falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "capítulo reconhecido"'
+
+# SPEC-0009/4 — placeholder no DoD global falha; literal entre aspas e redireção passam
+mkrepo
+printf '```bash\nnpm test -- <escopo>   # exit 0\n```\n' > "$R/dod"; set_dod "$R/dod"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/4: placeholder no DoD global avisa (janela da 1.9)" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*DoD global contém placeholder"'
+mkrepo
+spec_doc accepted "[]" "(nenhuma)" 'npx vitest run -t "renders <Button> disabled"   # casos 1-2
+python3 tool.py <in.json >out.json   # caso 3' "não implementada"
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/4: <Tag> entre aspas e redireção não são placeholder" '[ "$RC" -eq 0 ]'
+
+# SPEC-0009/5 — ponteiro como link markdown para capítulo inexistente → erro
+mkrepo
+awk '{ if ($0 == "| (nenhum ainda) | — |") print "| [INFRA](docs/context/INFRA.md) | mexeu em infra |"; else print }' \
+    "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/5: link markdown para capítulo inexistente falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "inexistente .docs/context/INFRA.md"'
+
+# SPEC-0009/6 — frontmatter: chave duplicada, status vazio, status lista (sem traceback)
+mkrepo
+mkdir -p "$R/docs/adr"
+printf -- '---\nstatus: proposed\ndate: 2026-01-01\nstatus: accepted\n---\n# X\n' > "$R/docs/adr/0001-x.md"
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/6: chave duplicada falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "chave duplicada .status."'
+printf -- '---\nstatus: ""\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/6: status vazio conta como ausente" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "obrigatórios ausentes"'
+printf -- '---\nstatus: [accepted]\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
+OUT=$(python3 "$CHECK" --root "$R" --warn-only 2>&1); RC=$?
+ck "SPEC-0009/6: status lista vira erro, sem traceback, --warn-only sai 0" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "status deve ser escalar" && ! echo "$OUT" | grep -q Traceback'
+
+# SPEC-0009/7 — builds-on apontando para o próprio doc → erro
+mkrepo
+mkdir -p "$R/docs/adr"
+printf -- '---\nstatus: proposed\ndate: 2026-01-01\nbuilds-on: [ADR-0001]\n---\n# X\n' > "$R/docs/adr/0001-x.md"
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/7: builds-on autorreferente avisa (janela da 1.9)" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*próprio doc"'
+
+imm() { python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref "$1" 2>&1; }
+
+# SPEC-0009/8 — renomear ADR aceito não esconde edição; rename puro passa
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."; gitify
+(cd "$R" && git mv docs/adr/0001-x.md docs/adr/0001-novo-nome.md)
+commit_all rename
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/8: rename puro de ADR aceito passa" '[ "$RC" -eq 0 ]'
+adr_doc "$R/docs/adr/0001-novo-nome.md" accepted null "" "Contexto alterado."
+commit_all edit
+OUT=$(imm HEAD~2); RC=$?
+ck "SPEC-0009/8: rename + edição de ADR aceito falha" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "renomeado de docs/adr/0001-x.md"'
+
+# SPEC-0009/9 — ADR aceito removido → erro
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+rm "$R/docs/adr/0001-x.md"; commit_all delete
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/9: ADR aceito removido falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "foi removido"'
+
+# SPEC-0009/10 — status de ADR aceito não regride (accepted → proposed)
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+adr_doc "$R/docs/adr/0001-x.md" proposed null "" "Contexto."; commit_all regress
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/10: accepted → proposed falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "regrediu"'
+
+# SPEC-0009/11 — VERDADE ATUAL só vale no topo e com até 3 linhas
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto.
+
+> VERDADE ATUAL: na prática decidimos o contrário"
+commit_all meio
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/11: VERDADE ATUAL no meio do corpo conta como corpo" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "corpo alterado"'
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "> VERDADE ATUAL: 1
+> 2
+> 3
+> 4 — linha além do limite" "Contexto."
+commit_all longo
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/11: VERDADE ATUAL com mais de 3 linhas falha" '[ "$RC" -ne 0 ]'
+
+# SPEC-0009/12 — branch atrás da base: ADR aceito novo na base não vira falso "removido"
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+(cd "$R" && git checkout -q -b feat)
+mkdir -p "$R/src"; echo x > "$R/src/a.txt"; commit_all feat
+(cd "$R" && git checkout -q main)
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."; commit_all main-avanca
+(cd "$R" && git checkout -q feat)
+OUT=$(imm main); RC=$?
+ck "SPEC-0009/12: compara com a merge-base, não com a ponta da base" '[ "$RC" -eq 0 ]'
+
+# SPEC-0009/13 — higiene segue o git: ignorado não reprova; duplicado versionável reprova
+mkrepo; gitify
+printf '.DS_Store\n' > "$R/.gitignore"; mkdir -p "$R/src"; : > "$R/src/.DS_Store"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/13: .DS_Store ignorado pelo .gitignore não reprova" '[ "$RC" -eq 0 ]'
+: > "$R/src/notas.md"; : > "$R/src/notas 2.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0009/13: duplicado não ignorado reprova" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "duplicado de sync"'
+
+# SPEC-0009/14 — --staged valida o INDEX, não a working tree
+mkrepo; gitify
+mkdir -p "$R/docs/adr"
+printf -- '---\nstatus: banana\n---\nsem h1\n' > "$R/docs/adr/0001-x.md"
+(cd "$R" && git add docs/adr/0001-x.md); rm "$R/docs/adr/0001-x.md"
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/14: doc inválido no index falha mesmo corrigido no disco" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "status inválido"'
+(cd "$R" && git reset -q)
+printf -- '---\nstatus: proposed\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
+(cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add -A)
+printf -- '---\nstatus: banana\n---\n' > "$R/docs/adr/0001-x.md"
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/14: index válido passa mesmo com o disco quebrado" '[ "$RC" -eq 0 ]'
+
+# SPEC-0009/25 — --staged valida o que o commit gravaria
+mkrepo; gitify
+mv "$R/AGENTS.md" "$R/ROUTER.md"; (cd "$R" && ln -s ROUTER.md AGENTS.md && git add -A)
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/25: AGENTS.md symlink resolvido no index" '[ "$RC" -eq 0 ]'
+mkrepo; mkdir -p "$R/docs/adr"
+printf -- '---\nstatus: proposed\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"; gitify
+(cd "$R" && git sparse-checkout set --no-cone '/*' '!/docs/' 2>/dev/null)
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/25: sparse-checkout sem docs/ não quebra --staged" '[ "$RC" -eq 0 ] && [ ! -e "$R/docs/adr/0001-x.md" ]'
+mkrepo; gitify; mkdir -p "$R/docs/adr"
+printf -- '---\nstatus: banana\n---\nsem h1\n' > "$R/docs/adr/0002-y.md"; (cd "$R" && git add -N docs/adr/0002-y.md)
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/25: entrada add -N fica fora do commit validado" '[ "$RC" -eq 0 ]'
+
+# SPEC-0009/26 — implemented-by olha o index no --staged
+mkrepo; mkdir -p "$R/src"; echo x > "$R/src/so-index.py"
+spec_doc implemented "[src/so-index.py]" "(nenhuma)" "true   # casos 1" "2026-11-18 · true → exit 0"
+gitify; rm "$R/src/so-index.py"
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/26: path só no index satisfaz implemented-by" '[ "$RC" -eq 0 ]'
+(cd "$R" && git rm -q --cached src/so-index.py); echo x > "$R/src/so-index.py"
+OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
+ck "SPEC-0009/26: path só no disco não satisfaz implemented-by" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "path inexistente"'
+
+# SPEC-0009/27 — bloco VERDADE ATUAL longo que já existia na base: tolerado até ser editado
+LONG="> VERDADE ATUAL: 1
+> 2
+> 3
+> 4
+> 5"
+mkrepo; adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "$LONG" "Contexto."; gitify
+OUT=$(python3 "$CHECK" --root "$R" 2>&1)
+ck "SPEC-0009/27: bloco longo existente gera aviso" 'echo "$OUT" | grep -q "AVISO.*VERDADE ATUAL com 5 linhas"'
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."; echo >> "$R/docs/adr/0002-y.md"; commit_all toca-outro
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/27: bloco longo intocado passa" '[ "$RC" -eq 0 ]'
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "${LONG/5/5 editada}" "Contexto."; commit_all edita-longo
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/27: bloco longo editado sem reduzir falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "com 5 linhas"'
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: 1
+> 2
+> 3" "Contexto."; commit_all reduz
+OUT=$(imm HEAD~2); RC=$?
+ck "SPEC-0009/27: bloco longo reduzido a 3 linhas passa" '[ "$RC" -eq 0 ]'
+
+# SPEC-0009/28 — repetir o marcador não estende o limite
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "> VERDADE ATUAL: a
+> b
+> c
+> VERDADE ATUAL: d
+> e
+> f" "Contexto."
+commit_all repete
+OUT=$(imm HEAD~1); RC=$?
+ck "SPEC-0009/28: marcador repetido conta como um bloco só" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "com 6 linhas"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

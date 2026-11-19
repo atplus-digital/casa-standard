@@ -5,7 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh
 #   curl -fsSL .../install.sh | sh -s -- <destino> [--repo-id NOME] [--tier T0|T1]
 #
-# Pinagem:            CASA_REF=v1.0.0 (tag ou sha) — baixa e carimba esse ref
+# Pinagem:            CASA_REF=v1.0.0 (tag ou sha) — baixa e carimba esse ref. Em pipe,
+#                     a variável é do sh: curl … | CASA_REF=v1.0.0 sh -s -- <destino>
 # Sem rede (testes):  CASA_TARBALL=/caminho/para/casa.tgz
 # Auditoria: prefira baixar, ler e rodar. Este script escreve SOMENTE num
 # mktemp (removido ao final) e no destino, via casa-init; sem sudo, sem $HOME.

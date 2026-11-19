@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.8
+casa-version: 1.9
 casa-standard-ref: self
 ```
 
@@ -43,9 +43,12 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
   lista em bloco). Sintaxe fora disso é ERRO proposital, não silêncio — ver STANDARD §6.
 - O router (`AGENTS.md`) também é validado: metadados CASA, DoD global e ponteiros de
   contexto precisam estar íntegros.
-- A resolução de ponteiro varre o router INTEIRO: todo caminho de capítulo (docs/context
-  terminando em .md) citado entre crases vira ponteiro declarado e precisa existir — por
-  isso, em prosa, não envolva o caminho completo de um capítulo numa crase.
+- A resolução de ponteiro varre o router INTEIRO (fora de comentário HTML): todo caminho de
+  capítulo (docs/context terminando em .md) citado entre crases OU como alvo de link
+  markdown vira ponteiro declarado e precisa existir — em prosa, não use nenhuma das formas.
+- O pre-commit roda `docs-check --staged`: valida o INDEX, não o disco. Teste o que vai
+  para o commit com `git add` antes; o lint de imutabilidade compara ADRs pelo NÚMERO
+  contra a merge-base (renomear não esconde edição; status não regride).
 - Capítulo RECONHECIDO declarado no Mapa de contexto (hoje só o `TESTS.md` em `docs/context/`)
   dispara invariante de conteúdo: exige comando canônico. Registry fechado em
   `RECOGNIZED_CHAPTERS`; estender = ADR no próprio repo (ADR-0008 / SPEC-0004).

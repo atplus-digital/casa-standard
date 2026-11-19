@@ -44,3 +44,4 @@ aponta (nunca lê em silêncio) qualquer linha que não entenda.
 | 0006 | sinalização de manutenção no docs-check | 2026-07-05 | em uso |
 | 0007 | docs-reserve | 2026-07-05 | em uso |
 | 0008 | casa-update-check | 2026-07-06 | em uso |
+| 0009 | Gate confiável: hook, CI e imutabilidade validam o que de fato entra | 2026-11-18 | em uso |
