@@ -1,0 +1,416 @@
+#!/usr/bin/env bash
+# Cenários da SPEC-0011 (build-site: compilador estático do site do CASA Standard). DoD: exit 0.
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD="$ROOT/scripts/build-site"
+INIT="$ROOT/scripts/casa-init"
+GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+pass=0; fail=0
+ck() {
+    if eval "$2" >/dev/null 2>&1; then
+        echo "PASS: $1"
+        pass=$((pass+1))
+    else
+        echo "FAIL: $1"
+        fail=$((fail+1))
+    fi
+}
+
+# ── SPEC-0011/1: Geração completa de rotas, docs de index.json, search-index e .nojekyll ──
+OUT1="$TMP/site1"
+python3 "$BUILD" --root "$ROOT" --out "$OUT1" >/dev/null 2>&1; RC1=$?
+ck "SPEC-0011/1: build-site termina com exit 0" '[ "$RC1" -eq 0 ]'
+ck "SPEC-0011/1b: rotas principais, assets e .nojekyll existem" '
+    [ -f "$OUT1/index.html" ] &&
+    [ -f "$OUT1/standard/index.html" ] &&
+    [ -f "$OUT1/grafo/index.html" ] &&
+    [ -f "$OUT1/skills/index.html" ] &&
+    [ -f "$OUT1/changelog/index.html" ] &&
+    [ -f "$OUT1/.nojekyll" ] &&
+    [ -f "$OUT1/assets/style.css" ] &&
+    [ -f "$OUT1/assets/app.js" ] &&
+    [ -f "$OUT1/assets/favicon.svg" ] &&
+    [ -f "$OUT1/assets/search-index.json" ]
+'
+ck "SPEC-0011/1c: cada item de docs/index.json gera página própria com seu H1" '
+python3 - "$ROOT" "$OUT1" << "PY"
+import html, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+out = pathlib.Path(sys.argv[2])
+items = json.loads((root / "docs/index.json").read_text(encoding="utf-8"))
+assert len(items) > 0
+for item in items:
+    stem = pathlib.Path(item["path"]).stem
+    page = out / item["layer"] / stem / "index.html"
+    assert page.is_file(), f"missing {page}"
+    body = page.read_text(encoding="utf-8")
+    expected_h1 = "<h1>" + html.escape(item["title"]) + "</h1>"
+    assert expected_h1 in body, f"title mismatch in {page}"
+PY
+'
+
+# ── SPEC-0011/3, 4, 5, 6, 7, 8: Auditoria estrutural de HTML, links relativos, SEO, auto-link e UI ──
+ck "SPEC-0011/3: links relativos, fragmentos #id e search-index resolvem dentro de _site/" '
+python3 - "$OUT1" << "PY"
+import json, pathlib, sys
+from html.parser import HTMLParser
+
+site = pathlib.Path(sys.argv[1]).resolve()
+html_files = sorted(site.rglob("*.html"))
+assert len(html_files) >= 30
+
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids = []
+        self.refs = []
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if "id" in d:
+            self.ids.append(d["id"])
+        for k in ("href", "src", "data-href"):
+            if k in d:
+                self.refs.append((k, d[k]))
+
+parsed = {}
+page_ids = {}
+for f in html_files:
+    p = PageParser()
+    p.feed(f.read_text(encoding="utf-8"))
+    parsed[f] = p
+    page_ids[f] = set(p.ids)
+
+for f, p in parsed.items():
+    for attr, val in p.refs:
+        if val.startswith(("http://", "https://", "mailto:")):
+            continue
+        assert not val.startswith("/"), f"{f}: root-relative URL {val} breaks GitHub Pages subpath"
+        path_part, _, frag = val.partition("#")
+        target = f if not path_part else (f.parent / path_part).resolve()
+        assert str(target).startswith(str(site)), f"{f}: escapes site root: {val}"
+        target_file = (target / "index.html") if target.is_dir() else target
+        assert target_file.is_file(), f"{f}: broken link {val} -> {target_file}"
+        if frag and target_file in page_ids:
+            assert frag in page_ids[target_file], f"{f}: broken anchor #{frag} in {val}"
+
+sidx = json.loads((site / "assets/search-index.json").read_text(encoding="utf-8"))
+assert len(sidx) >= 30
+for item in sidx:
+    path_part, _, frag = item["url"].partition("#")
+    target = (site / path_part).resolve()
+    target_file = (target / "index.html") if target.is_dir() else target
+    assert target_file.is_file(), f"search-index broken url: {item}"
+    if frag:
+        assert frag in page_ids[target_file], f"search-index broken fragment #{frag}: {item}"
+PY
+'
+
+ck "SPEC-0011/4: todas as páginas têm lang=pt-BR, <title>, meta description, 1 <h1> e IDs únicos" '
+python3 - "$OUT1" << "PY"
+import pathlib, sys
+from html.parser import HTMLParser
+
+site = pathlib.Path(sys.argv[1]).resolve()
+class SEOParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.lang = None
+        self.h1 = 0
+        self.in_title = False
+        self.title_text = []
+        self.meta_desc = ""
+        self.ids = []
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if tag == "html":
+            self.lang = d.get("lang")
+        elif tag == "h1":
+            self.h1 += 1
+        elif tag == "title":
+            self.in_title = True
+        elif tag == "meta" and d.get("name") == "description":
+            self.meta_desc = d.get("content", "").strip()
+        if "id" in d:
+            self.ids.append(d["id"])
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+    def handle_data(self, data):
+        if self.in_title:
+            self.title_text.append(data)
+
+for f in sorted(site.rglob("*.html")):
+    txt = f.read_text(encoding="utf-8")
+    assert "\x00" not in txt, f"{f}: leaked placeholder"
+    p = SEOParser()
+    p.feed(txt)
+    assert p.lang == "pt-BR", f"{f}: lang={p.lang}"
+    assert p.h1 == 1, f"{f}: h1 count={p.h1}"
+    assert "".join(p.title_text).strip(), f"{f}: empty <title>"
+    assert len(p.meta_desc) >= 20, f"{f}: missing/short meta description"
+    assert len(p.ids) == len(set(p.ids)), f"{f}: duplicate element IDs"
+PY
+'
+
+ck "SPEC-0011/5: prosa auto-linka ADR-NNNN/SPEC-NNNN mas preserva blocos <pre><code> literais" '
+python3 - "$OUT1" << "PY"
+import pathlib, re, sys
+std = (pathlib.Path(sys.argv[1]) / "standard/index.html").read_text(encoding="utf-8")
+assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0017-[^\"]+\">ADR-0017</a>", std), "ADR-0017 not linked in prose"
+assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0009-[^\"]+\">ADR-0009</a>", std), "ADR-0009 not linked in prose"
+m_code = re.search(r"<pre><code[^>]*>[^<]*builds-on: \[ADR-0005\][^<]*</code></pre>", std)
+assert m_code is not None, "Code block with [ADR-0005] was corrupted by auto-linker"
+PY
+'
+
+ck "SPEC-0011/6: ADR superseded destaca VERDADE ATUAL e documentos exibem citado por reverso" '
+python3 - "$OUT1" << "PY"
+import pathlib, sys
+site = pathlib.Path(sys.argv[1])
+adr1 = (site / "adr/0001-gate-automatizado-sem-remote/index.html").read_text(encoding="utf-8")
+assert "class=\"truth-callout\"" in adr1 and "VERDADE ATUAL" in adr1, "missing truth-callout on ADR-0001"
+assert "Superado por" in adr1 and "../../adr/0006-gate-por-host-do-remote/" in adr1, "missing superseded-by link"
+assert "Citado por (a jusante)" in adr1 and "../../adr/0004-bootstrap-casa-init/" in adr1, "missing reverse cited_by link"
+
+adr4 = (site / "adr/0004-bootstrap-casa-init/index.html").read_text(encoding="utf-8")
+assert "../../specs/0001-casa-init/" in adr4, "ADR-0004 missing downstream SPEC-0001"
+PY
+'
+
+ck "SPEC-0011/7: empty-states de busca e de filtro do grafo exibem e limpam estado vazio (ADR-0014)" '
+python3 - "$OUT1" << "PY"
+import pathlib, shutil, subprocess, sys
+site = pathlib.Path(sys.argv[1])
+grafo = (site / "grafo/index.html").read_text(encoding="utf-8")
+assert "id=\"graph-empty-state\" hidden" in grafo, "missing graph-empty-state"
+assert "id=\"graph-reset-btn\"" in grafo, "missing graph-reset-btn"
+assert "id=\"search-empty-state\" hidden" in grafo, "missing search-empty-state"
+assert "id=\"search-clear-btn\"" in grafo, "missing search-clear-btn"
+
+node_bin = shutil.which("node")
+if node_bin:
+    harness = """
+const fs = require("fs");
+const vm = require("vm");
+const code = fs.readFileSync(process.argv[1], "utf8");
+const sidx = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+
+function el(id, attrs = {}) {
+  const listeners = {};
+  return {
+    id,
+    tagName: "DIV",
+    hidden: !!attrs.hidden,
+    value: attrs.value || "",
+    textContent: "",
+    innerHTML: "",
+    children: [],
+    classList: { add(){}, remove(){}, toggle(){ return true; } },
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+    setAttribute(k, v) { attrs[k] = v; },
+    removeAttribute(k) { delete attrs[k]; },
+    appendChild(c) { this.children.push(c); },
+    addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+    trigger(ev, payload = {}) { (listeners[ev] || []).forEach(fn => fn(payload)); },
+    querySelectorAll() { return []; },
+    focus() {}
+  };
+}
+
+const row1 = el("r1", { "data-doc-id": "ADR-0001", "data-layer": "adr", "data-status": "superseded", "data-search": "adr-0001 gate" });
+const graphTable = el("graph-ledger-body");
+graphTable.querySelectorAll = () => [row1];
+const filterInput = el("graph-filter-input");
+const graphEmpty = el("graph-empty-state", { hidden: true });
+const resetBtn = el("graph-reset-btn");
+const searchOpenBtn = el("search-open-btn");
+const searchBackdrop = el("search-backdrop", { hidden: true });
+const searchInput = el("search-modal-input");
+const searchResults = el("search-results-list");
+const searchEmpty = el("search-empty-state", { hidden: true });
+const searchClearBtn = el("search-clear-btn");
+const themeBtn = el("theme-toggle-btn");
+const rootEl = el("html", { "data-site-root": "./", "data-theme": "light" });
+const store = {};
+
+const byId = {
+  "graph-ledger-body": graphTable,
+  "graph-filter-input": filterInput,
+  "graph-empty-state": graphEmpty,
+  "graph-reset-btn": resetBtn,
+  "search-open-btn": searchOpenBtn,
+  "search-backdrop": searchBackdrop,
+  "search-modal-input": searchInput,
+  "search-results-list": searchResults,
+  "search-empty-state": searchEmpty,
+  "search-clear-btn": searchClearBtn,
+  "theme-toggle-btn": themeBtn
+};
+
+const ctx = {
+  document: {
+    documentElement: rootEl,
+    getElementById: (id) => byId[id] || null,
+    querySelectorAll: () => [],
+    createElement: (t) => el(t),
+    addEventListener: () => {}
+  },
+  window: { setTimeout: (fn) => fn(), location: { href: "" } },
+  localStorage: { setItem: (k, v) => { store[k] = v; }, getItem: (k) => store[k] || null },
+  navigator: { clipboard: { writeText: () => Promise.resolve() } },
+  fetch: () => Promise.resolve({ json: () => Promise.resolve(sidx) }),
+  Promise, Set, Map, Array
+};
+vm.runInNewContext(code, ctx);
+
+// Exercise graph empty-state and reset button
+filterInput.value = "termo-inexistente-xyz-999";
+filterInput.trigger("input");
+if (graphEmpty.hidden !== false || row1.hidden !== true) process.exit(11);
+resetBtn.trigger("click");
+if (graphEmpty.hidden !== true || row1.hidden !== false || filterInput.value !== "") process.exit(12);
+
+// Exercise theme toggle persistence
+themeBtn.trigger("click");
+if (rootEl.getAttribute("data-theme") !== "dark" || store["casa-theme"] !== "dark") process.exit(13);
+
+// Exercise search modal empty-state and clear button
+searchOpenBtn.trigger("click");
+setImmediate(() => {
+  searchInput.value = "termo-inexistente-xyz-999";
+  searchInput.trigger("input");
+  if (searchEmpty.hidden !== false) process.exit(14);
+  searchClearBtn.trigger("click");
+  if (searchEmpty.hidden !== true || searchInput.value !== "") process.exit(15);
+});
+"""
+    subprocess.run(
+        [node_bin, "-e", harness, str(site / "assets/app.js"), str(site / "assets/search-index.json")],
+        check=True,
+    )
+PY
+'
+
+ck "SPEC-0011/8: alternador de tema claro/escuro, alvos de cópia válidos e JS sintaticamente íntegro" '
+python3 - "$OUT1" << "PY"
+import pathlib, subprocess, shutil, sys
+from html.parser import HTMLParser
+
+site = pathlib.Path(sys.argv[1])
+css = (site / "assets/style.css").read_text(encoding="utf-8")
+assert "[data-theme=\"light\"]" in css and "[data-theme=\"dark\"]" in css, "missing light/dark theme tokens"
+
+class CopyCheck(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids = set()
+        self.targets = []
+        self.has_theme_btn = False
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if "id" in d:
+            self.ids.add(d["id"])
+            if d["id"] == "theme-toggle-btn":
+                self.has_theme_btn = True
+        if "data-copy-target" in d:
+            self.targets.append(d["data-copy-target"])
+
+for f in sorted(site.rglob("*.html")):
+    txt = f.read_text(encoding="utf-8")
+    assert "localStorage.getItem(\"casa-theme\")" in txt, f"{f}: missing flash-free theme init"
+    c = CopyCheck()
+    c.feed(txt)
+    assert c.has_theme_btn, f"{f}: missing #theme-toggle-btn"
+    for t in c.targets:
+        assert t in c.ids, f"{f}: data-copy-target={t} points to non-existent id"
+
+node_bin = shutil.which("node")
+if node_bin:
+    subprocess.run([node_bin, "--check", str(site / "assets/app.js")], check=True)
+PY
+'
+
+# ── SPEC-0011/9: Determinismo byte a byte em duas execuções consecutivas ──
+OUT2="$TMP/site2"
+python3 "$BUILD" --root "$ROOT" --out "$OUT2" >/dev/null 2>&1
+ck "SPEC-0011/9: duas execuções consecutivas geram árvores _site byte a byte idênticas" '
+python3 - "$OUT1" "$OUT2" << "PY"
+import hashlib, pathlib, sys
+
+def manifest(base: pathlib.Path) -> dict[str, str]:
+    res = {}
+    for p in sorted(base.rglob("*")):
+        if p.is_file():
+            res[str(p.relative_to(base))] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return res
+
+m1 = manifest(pathlib.Path(sys.argv[1]))
+m2 = manifest(pathlib.Path(sys.argv[2]))
+assert m1 == m2, "non-deterministic build output"
+PY
+'
+
+# ── SPEC-0011/2 e 11: Derivação dinâmica sem hardcode + compatibilidade com docs-check ──
+FIX="$TMP/repo-copy"
+mkdir -p "$FIX"
+(cd "$ROOT" && tar --exclude='.git' --exclude='_site' -cf - .) | (cd "$FIX" && tar -xf -)
+git -C "$FIX" init -q
+git -C "$FIX" config user.email "test@example.com"
+git -C "$FIX" config user.name "Test"
+
+python3 - "$FIX" << 'PY'
+import pathlib, re, sys
+fix = pathlib.Path(sys.argv[1])
+std_p = fix / "STANDARD.md"
+std_txt = std_p.read_text(encoding="utf-8")
+std_p.write_text(re.sub(r"\*\*Versão CASA:\*\*\s*[0-9.]+", "**Versão CASA:** 9.42", std_txt, count=1), encoding="utf-8")
+
+adr99 = fix / "docs/adr/0099-decisao-sintetica-de-derivacao.md"
+adr99.write_text(
+    "---\nstatus: accepted\ndate: 2026-11-18\nbuilds-on: [ADR-0004]\nsuperseded-by: null\ndeciders: [maicon]\n---\n\n"
+    "# Decisão sintética para provar derivação dinâmica\n\n## Contexto e problema\n\nTeste.\n\n## Decisão\n\nOk.\n\n## Confirmação\n\n```bash\ntrue\n```\n",
+    encoding="utf-8",
+)
+PY
+python3 "$FIX/scripts/docs-check" --root "$FIX" --emit-index >/dev/null 2>&1
+python3 "$FIX/scripts/build-site" --root "$FIX" --out "$FIX/_site" >/dev/null 2>&1; RC_DYN=$?
+
+ck "SPEC-0011/2: alterar versão em STANDARD.md e adicionar ADR reflete nas páginas sem hardcode" '
+    [ "$RC_DYN" -eq 0 ] &&
+    grep -q "v9.42" "$FIX/_site/index.html" &&
+    grep -q "Versão 9.42" "$FIX/_site/standard/index.html" &&
+    [ -f "$FIX/_site/adr/0099-decisao-sintetica-de-derivacao/index.html" ] &&
+    grep -q "ADR-0099" "$FIX/_site/grafo/index.html" &&
+    grep -q "ADR-0099" "$FIX/_site/assets/search-index.json"
+'
+
+# Restaura cópia limpa do repo com _site/ gerado na raiz para testar SPEC-0011/11 (0 erros e 0 avisos)
+FIX_CLEAN="$TMP/repo-clean"
+mkdir -p "$FIX_CLEAN"
+(cd "$ROOT" && tar --exclude='.git' --exclude='_site' -cf - .) | (cd "$FIX_CLEAN" && tar -xf -)
+git -C "$FIX_CLEAN" init -q
+python3 "$FIX_CLEAN/scripts/build-site" --root "$FIX_CLEAN" --out "$FIX_CLEAN/_site" >/dev/null 2>&1
+DC_OUT="$(python3 "$FIX_CLEAN/scripts/docs-check" --root "$FIX_CLEAN" 2>&1)"; DC_RC=$?
+ck "SPEC-0011/11: com _site/ gerado na raiz, docs-check sai 0 com 0 erros e 0 avisos" '
+    [ "$DC_RC" -eq 0 ] && echo "$DC_OUT" | grep -q "0 erro(s) · 0 aviso(s)"
+'
+
+# ── SPEC-0011/10: Isolamento do casa-init (adotante não recebe build-site, test-site nem site/) ──
+ADOPTER="$TMP/adopter"
+mkdir -p "$ADOPTER"
+git -C "$ADOPTER" init -q
+"$INIT" "$ADOPTER" --repo-id adopter-demo >/dev/null 2>&1; INIT_RC=$?
+ck "SPEC-0011/10: casa-init não copia build-site, test-site nem site/ para adotante" '
+    [ "$INIT_RC" -eq 0 ] &&
+    [ ! -e "$ADOPTER/scripts/build-site" ] &&
+    [ ! -e "$ADOPTER/scripts/test-site" ] &&
+    [ ! -e "$ADOPTER/site" ]
+'
+
+echo ""
+echo "$pass passed, $fail failed"
+[ "$fail" -eq 0 ]

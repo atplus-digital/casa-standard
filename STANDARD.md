@@ -241,3 +241,4 @@ O padrão vive num repo simples (`casa-standard`) com este documento, os templat
 - `install.sh` — bootstrap via curl|sh, sem clone (§10; testado por `scripts/test-install` no CI)
 - `docs/templates/docs-check.workflow.yml` — workflow de CI distribuído pelo `casa-init`
 - `docs/templates/casa-update-check.workflow.yml` — workflow agendado do update-check (ADR-0016)
+- `scripts/build-site` — compila o site estático público das fontes canônicas (ADR-0018, SPEC-0011; testado por `scripts/test-site` no CI)
