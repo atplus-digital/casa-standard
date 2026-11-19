@@ -16,6 +16,9 @@ Aditivo e idempotente:
     repo (ADR-0010) — inserida só se ausente, nunca alterada. CLAUDE.md (ponte de
     host, ADR-0009) é criado do template só se ausente; existente nunca é tocado
     (AVISO se falta @AGENTS.md).
+  - Skills do ciclo (ADR-0017, só T1): casa-explore/propose/apply/verify/close em
+    .agents/skills/ e .claude/skills/ — da toolchain, atualizadas quando divergem; skill
+    do repo com outro nome nunca é tocada.
   - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente, com o branch
     padrão do repo; existente e divergente do template → AVISO, nunca sobrescrito);
     sem remote ou host sem adaptador de CI → pre-commit hook no diretório de hooks
@@ -33,7 +36,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.9"
+CASA_VERSION = "1.10"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
@@ -50,6 +53,14 @@ TOOLCHAIN = [
 # Pontes por host (ADR-0009) — conjunto FECHADO: host de agente que não lê AGENTS.md
 # recebe um arquivo-ponte que importa o router. Host novo entra por ADR, nunca ad-hoc.
 HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
+# Skills do ciclo de entrega (ADR-0017): da TOOLCHAIN — casa-* atualizadas quando divergem;
+# skill do repo com outro nome nunca é tocada. Diretórios em conjunto FECHADO: a convenção
+# entre clientes (.agents/skills) + a do host que não a lê (Claude Code). Novo = ADR.
+SKILLS = ["casa-explore", "casa-propose", "casa-apply", "casa-verify", "casa-close"]
+SKILL_DIRS = [".agents/skills", ".claude/skills"]
+SKILL_MARKER = "\n# CASA · "  # cabeçalho presente nas skills casa-* de toda versão
+# Skill casa-* renomeada ou retirada numa versão futura: listada aqui, sai do adotante.
+RETIRED_SKILLS = []
 # Workflows instalados quando o remote é GitHub (ADR-0006): gate + update-check (ADR-0016).
 GITHUB_WORKFLOWS = [
     ("docs/templates/docs-check.workflow.yml", ".github/workflows/docs-check.yml",
@@ -154,6 +165,91 @@ def upsert_router_meta(text, ref):
     set_key("casa-version", CASA_VERSION, ["casa-tier", "casa-repo-id"], only_if_missing=True)
     set_key("casa-standard-ref", ref, ["casa-version", "casa-tier", "casa-repo-id"])
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
+
+
+def _is_casa_skill(path):
+    try:
+        return SKILL_MARKER in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def router_tier(text, fallback):
+    """Lê casa-tier do bloco yaml do router (sem comentário HTML, aceitando aspas e comentário
+    inline como o docs-check); sem declaração no router existente, usa --tier."""
+    visible = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    yb = re.search(r"```yaml\s*\n(.*?)\n```", visible, flags=re.I | re.S)
+    if yb:
+        m = re.search(r"^casa-tier:\s*(.*)$", yb.group(1), flags=re.M)
+        if m:
+            val = re.split(r"\s+#", m.group(1).strip(), maxsplit=1)[0].strip().strip("'\"")
+            if val:
+                return val
+    return fallback
+
+
+def render_skill(data, ref):
+    """O link do template aponta para o STANDARD em `main`; o adotante recebe o STANDARD do
+    snapshot da toolchain instalada (casa-standard-ref) — o que as skills descrevem."""
+    data = data.replace(b"\r\n", b"\n")  # clone Windows com core.autocrlf=true → LF
+    if re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]*", ref or "") and ref not in ("unknown", "local"):
+        return data.replace(b"/casa-standard/blob/main/", f"/casa-standard/blob/{ref}/".encode())
+    return data
+
+
+def remove_casa_skills(target):
+    removed = 0
+    for base in SKILL_DIRS:
+        try:
+            for name in (*SKILLS, *RETIRED_SKILLS):
+                old = target / base / name / "SKILL.md"
+                if old.is_file() and _is_casa_skill(old):
+                    shutil.rmtree(old.parent)
+                    removed += 1
+            skills_dir = target / base
+            if skills_dir.is_dir() and not any(skills_dir.iterdir()):
+                skills_dir.rmdir()
+                if skills_dir.parent.is_dir() and not any(skills_dir.parent.iterdir()):
+                    skills_dir.parent.rmdir()
+        except OSError:
+            continue
+    return removed
+
+
+def install_skills(target, ref):
+    for base in SKILL_DIRS:
+        count = {"criado": 0, "atualizado": 0, "em dia": 0, "removido": 0}
+        try:
+            for name in RETIRED_SKILLS:  # skill casa-* aposentada: sai, se for mesmo nossa
+                old = target / base / name / "SKILL.md"
+                if old.is_file() and _is_casa_skill(old):
+                    shutil.rmtree(old.parent)
+                    count["removido"] += 1
+            for name in SKILLS:
+                data = render_skill((SRC / "docs/templates/skills" / name / "SKILL.md").read_bytes(), ref)
+                dest = target / base / name / "SKILL.md"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.is_symlink() and not dest.exists():
+                    dest.unlink()
+                if not dest.exists():
+                    count["criado"] += 1
+                elif dest.read_bytes() != data:
+                    count["atualizado"] += 1
+                else:
+                    count["em dia"] += 1
+                    continue
+                dest.write_bytes(data)  # bytes: preserva LF no Windows
+        except OSError as e:  # ex.: `.claude` é arquivo — não derruba o resto da instalação
+            say("AVISO", f"{base}: não consegui instalar as skills do ciclo ({e}) — siga sem elas "
+                         "ou libere o diretório (ADR-0017)")
+            continue
+        tag = next((k for k in ("criado", "atualizado", "removido") if count[k]), "em dia")
+        detail = ", ".join(f"{v} {k}" for k, v in count.items() if v)
+        say(tag, f"{base}/casa-* (skills do ciclo, ADR-0017: {detail})")
+        if sh(["git", "-C", str(target), "check-ignore", "-q",
+               f"{base}/{SKILLS[0]}/SKILL.md"]).returncode == 0:
+            say("AVISO", f"{base}/ está no .gitignore — as skills ficam só nesta máquina; "
+                         "versione-as para o time e os agentes do CI (ADR-0017)")
 
 
 HOOK_MARKER = "Gate local do CASA Standard"  # frase presente no scripts/pre-commit de toda versão
@@ -282,6 +378,15 @@ def main():
     else:
         say("AVISO", f"{shim_name} existe sem `{shim_marker}` — o Claude Code não carrega "
                      f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
+
+    # 2c. Skills do ciclo (ADR-0017) — só em T1: T0 não tem ADR/Spec para o ciclo operar.
+    if router_tier(router.read_text(encoding="utf-8", errors="replace"), args.tier) == "T0":
+        if remove_casa_skills(target):
+            say("removido", "skills do ciclo (casa-*): repo mudou para T0 (ADR-0017)")
+        else:
+            say("ignorado", "skills do ciclo (casa-*): repo T0 não usa ADR/Spec (ADR-0017)")
+    else:
+        install_skills(target, ref)
 
     # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
     r = sh(["git", "-C", str(target), "rev-parse", "--show-toplevel"])

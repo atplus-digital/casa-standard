@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0001 (casa-init). DoD: exit 0 = todos verdes.
+# Cenários das SPEC-0001, 0009 e 0010 (casa-init). DoD: exit 0 = todos verdes.
 # Roda local e no CI; sem dependências além de git, python3 e coreutils.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -157,6 +157,113 @@ echo "# customizado" >> "$WF"
 OUT=$(python3 "$INIT" "$D" 2>&1)
 ck "SPEC-0009/18: workflow divergente gera AVISO e é preservado" \
    'echo "$OUT" | grep -q "AVISO.*difere do template" && grep -q "customizado" "$WF"'
+
+# --- SPEC-0010: skills do ciclo (ADR-0017) ---
+SK="$(mktemp -d)/sk"; python3 "$INIT" "$SK" --repo-id sk >/dev/null
+NAMES="casa-explore casa-propose casa-apply casa-verify casa-close"
+all_in() { for n in $NAMES; do [ -f "$1/$n/SKILL.md" ] || return 1; done; }
+
+# SPEC-0010/1 — T1: as cinco skills nos dois diretórios
+ck "SPEC-0010/1: skills em .agents/skills"         'all_in "$SK/.agents/skills"'
+ck "SPEC-0010/1: skills em .claude/skills"         'all_in "$SK/.claude/skills"'
+
+# SPEC-0010/2 — cópias idênticas entre si e ao template, com o link do STANDARD no ref
+# carimbado no router (SPEC-0010/8): um fato, uma fonte
+SKREF="$(sed -n 's/^casa-standard-ref: *\([^ ]*\).*/\1/p' "$SK/AGENTS.md")"
+same_all() { for n in $NAMES; do
+               sed "s#/casa-standard/blob/main/#/casa-standard/blob/$SKREF/#" "$ROOT/docs/templates/skills/$n/SKILL.md" > "$SK.tpl"
+               cmp -s "$SK.tpl" "$SK/.agents/skills/$n/SKILL.md" && cmp -s "$SK.tpl" "$SK/.claude/skills/$n/SKILL.md" || return 1
+             done; }
+ck "SPEC-0010/2: cópias idênticas ao template renderizado" 'same_all'
+ck "SPEC-0010/8: skills apontam o STANDARD no ref da toolchain" \
+   '[ -n "$SKREF" ] && grep -q "casa-standard/blob/$SKREF/STANDARD.md" "$SK/.claude/skills/casa-explore/SKILL.md"'
+SKL="$(mktemp -d)/skl"; CASA_STANDARD_REF=local python3 "$INIT" "$SKL" --repo-id skl >/dev/null
+ck "SPEC-0010/8b: ref local mantém blob/main/" \
+   'grep -q "^casa-standard-ref: local " "$SKL/AGENTS.md" && grep -q "casa-standard/blob/main/STANDARD.md" "$SKL/.agents/skills/casa-explore/SKILL.md"'
+
+# SPEC-0010/3 — formato Agent Skills portável (agentskills.io/specification)
+ck "SPEC-0010/3: frontmatter válido e portável" 'python3 - "$ROOT/docs/templates/skills" <<'"'"'EOF'"'"'
+import re, sys
+from pathlib import Path
+dirs = sorted(p for p in Path(sys.argv[1]).iterdir() if p.is_dir())
+assert [d.name for d in dirs] == sorted(["casa-explore", "casa-propose", "casa-apply", "casa-verify", "casa-close"]), dirs
+for d in dirs:
+    t = (d / "SKILL.md").read_text(encoding="utf-8")
+    assert t.startswith("---\n"), d
+    fm = t.split("---\n")[1]
+    assert len(fm.strip().splitlines()) == 2, (d, fm)                  # sem linha extra/duplicada
+    keys = dict(re.findall(r"^([a-z-]+): (.*)$", fm, re.M))
+    assert set(keys) == {"name", "description"}, (d, keys)            # só campos portáveis
+    n, desc = keys["name"], keys["description"]
+    assert n == d.name and re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", n) and len(n) <= 64, n
+    assert 0 < len(desc) <= 1024 and desc[0].isalnum() and "<" not in desc and ">" not in desc, d
+    assert ": " not in desc and " #" not in desc, d                    # escalar YAML simples
+EOF'
+
+# SPEC-0010/4 — todo scripts/… citado nas skills existe na toolchain instalada
+cmds_exist() { for s in $(grep -oh "scripts/[a-z-]*" "$SK"/.agents/skills/*/SKILL.md | sort -u); do
+               [ -f "$SK/$s" ] || return 1; done; }
+ck "SPEC-0010/4: comandos citados existem no destino" 'cmds_exist'
+
+# SPEC-0010/5 — casa-* alterada volta ao template; skill do repo com outro nome intocada
+echo "edição local" >> "$SK/.claude/skills/casa-verify/SKILL.md"
+mkdir -p "$SK/.claude/skills/minha-skill"; printf -- "---\nname: minha-skill\ndescription: x\n---\n" > "$SK/.claude/skills/minha-skill/SKILL.md"
+OUT=$(python3 "$INIT" "$SK" 2>&1)
+ck "SPEC-0010/5: casa-* divergente é atualizada"   'same_all && echo "$OUT" | grep -q "atualizado.*claude/skills/casa-"'
+ck "SPEC-0010/5: skill do repo intocada"           'grep -q "name: minha-skill" "$SK/.claude/skills/minha-skill/SKILL.md"'
+
+# SPEC-0010/6 — T0 não recebe skills (novo, legado com --tier T0, casa-tier entre aspas e migração T1→T0)
+T0="$(mktemp -d)/t0"; python3 "$INIT" "$T0" --tier T0 >/dev/null
+ck "SPEC-0010/6: T0 sem skills"                    '[ ! -e "$T0/.agents/skills" ] && [ ! -e "$T0/.claude/skills" ]'
+T0L="$(mktemp -d)/t0l"; mkdir -p "$T0L"; printf '# Meu POC\n' > "$T0L/AGENTS.md"
+python3 "$INIT" "$T0L" --tier T0 >/dev/null
+ck "SPEC-0010/6b: legado sem casa-tier respeita --tier T0" '[ ! -e "$T0L/.agents/skills" ] && [ ! -e "$T0L/.claude/skills" ]'
+T0Q="$(mktemp -d)/t0q"; python3 "$INIT" "$T0Q" --tier T0 >/dev/null
+sed -i 's/casa-tier: T0/casa-tier: "T0"/' "$T0Q/AGENTS.md"
+printf '\n<!-- casa-tier: T1 -->\n' >> "$T0Q/AGENTS.md"
+python3 "$INIT" "$T0Q" >/dev/null
+ck "SPEC-0010/6c: casa-tier entre aspas continua T0" '[ ! -e "$T0Q/.agents/skills" ] && [ ! -e "$T0Q/.claude/skills" ]'
+T0M="$(mktemp -d)/t0m"; python3 "$INIT" "$T0M" >/dev/null
+mkdir -p "$T0M/.claude/skills/minha-skill"; printf -- '---\nname: minha-skill\ndescription: x\n---\n' > "$T0M/.claude/skills/minha-skill/SKILL.md"
+sed -i 's/casa-tier: T1/casa-tier: T0/' "$T0M/AGENTS.md"
+OUT=$(python3 "$INIT" "$T0M" 2>&1)
+ck "SPEC-0010/6d: migração T1→T0 remove casa-* e preserva skill do repo" \
+   'echo "$OUT" | grep -q "removido.*skills do ciclo" && [ ! -e "$T0M/.agents/skills" ] && [ ! -e "$T0M/.claude/skills/casa-explore" ] && [ -f "$T0M/.claude/skills/minha-skill/SKILL.md" ]'
+
+# SPEC-0010/9 — `.claude` como arquivo: AVISO, sem traceback, o resto da instalação segue
+gitrepo s9; : > "$D/.claude"
+OUT=$(python3 "$INIT" "$D" 2>&1); RC=$?
+ck "SPEC-0010/9: .claude arquivo não derruba o casa-init" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q Traceback && echo "$OUT" | grep -q "AVISO.*claude/skills"'
+ck "SPEC-0010/9: gate e .agents/skills instalados mesmo assim" \
+   '[ -e "$D/.git/hooks/pre-commit" ] && [ -f "$D/.agents/skills/casa-explore/SKILL.md" ]'
+
+# SPEC-0010/10 — diretório de skills no .gitignore: AVISO (só esta máquina veria)
+gitrepo s10; printf '.claude/\n' > "$D/.gitignore"
+OUT=$(python3 "$INIT" "$D" 2>&1)
+ck "SPEC-0010/10: .claude/ ignorado gera AVISO" 'echo "$OUT" | grep -q "AVISO.*claude/skills/ está no .gitignore"'
+
+# SPEC-0010/11 — skill casa-* aposentada sai do adotante; homônima válida ou não-UTF-8 fica
+gitrepo s11; mkdir -p "$D/.agents/skills/casa-velha" "$D/.claude/skills/casa-velha" "$D/.claude/skills/casa-bin"
+printf -- '---\nname: casa-velha\ndescription: x\n---\n\n# CASA · velha\n' > "$D/.agents/skills/casa-velha/SKILL.md"
+printf -- '---\nname: casa-velha\ndescription: x\n---\n\n# Skill própria do adotante\n' > "$D/.claude/skills/casa-velha/SKILL.md"
+printf '\377\376invalido' > "$D/.claude/skills/casa-bin/SKILL.md"
+OUT=$(python3 -c "
+import sys
+from importlib.machinery import SourceFileLoader
+m = SourceFileLoader('casa_init', sys.argv[1]).load_module()
+m.RETIRED_SKILLS = ['casa-velha', 'casa-bin']; sys.argv = ['casa-init', sys.argv[2]]; m.main()" "$INIT" "$D" 2>&1); RC=$?
+ck "SPEC-0010/11: aposentada removida pelo marcador CASA" '[ "$RC" -eq 0 ] && [ ! -e "$D/.agents/skills/casa-velha" ]'
+ck "SPEC-0010/11: homônima válida (name=dir) preservada" '[ -f "$D/.claude/skills/casa-velha/SKILL.md" ]'
+ck "SPEC-0010/11b: homônima não-UTF-8 preservada sem traceback" '[ -f "$D/.claude/skills/casa-bin/SKILL.md" ] && ! echo "$OUT" | grep -q Traceback'
+
+# SPEC-0010/12 — toda seção §N ou subseção §N.M citada nas skills existe no STANDARD
+secs_exist() { for s in $(grep -ohE "§[0-9]+(\.[0-9]+)*" "$ROOT"/docs/templates/skills/*/SKILL.md | sort -u | tr -d '§'); do
+               case "$s" in
+                 *.*) grep -q "^### $s " "$ROOT/STANDARD.md" || return 1 ;;
+                 *)   grep -q "^## $s\. " "$ROOT/STANDARD.md" || return 1 ;;
+               esac; done; }
+ck "SPEC-0010/12: seções e subseções citadas existem no STANDARD" 'secs_exist'
 
 # SPEC-0009/22 — worktree com validador anterior ao --staged não bloqueia todo commit
 gitrepo wt22; python3 "$INIT" "$D" >/dev/null 2>&1; git -C "$D" add -A; git -C "$D" commit -q -m adota >/dev/null 2>&1

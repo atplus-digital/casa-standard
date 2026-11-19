@@ -1,5 +1,14 @@
 # Changelog
 
+## CASA 1.10 — 2026-11-18
+
+- O `casa-init` instala, em repo T1, as skills `casa-explore`, `casa-propose`,
+  `casa-apply`, `casa-verify` e `casa-close` em `.agents/skills/` e `.claude/skills/`
+  (formato aberto Agent Skills; ADR-0017, SPEC-0010): o ciclo do §9 vira procedimento que o
+  agente executa, com links cravados no `casa-standard-ref` do adotante. O `casa-verify`
+  audita caso de borda × teste ("em que situação este teste passaria com a entrega
+  quebrada?") — assistivo, nunca gate. Mudança compatível.
+
 ## CASA 1.9 — 2026-11-18
 
 Gate confiável (SPEC-0009): a toolchain passa a cumprir o que o STANDARD prometia e fecha

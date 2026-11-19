@@ -13,3 +13,4 @@
 | [SPEC-0007](0007-docs-reserve.md) | docs-reserve reserva o próximo NNNN e cria o documento do template | implemented |
 | [SPEC-0008](0008-casa-update-check.md) | casa-update-check mantém no tracker o aviso de contrato CASA desatualizado | implemented |
 | [SPEC-0009](0009-gate-confiavel-hook-ci-e-imutabilidade-validam-o-que-de-fato-entra.md) | Gate confiável: hook, CI e imutabilidade validam o que de fato entra | implemented |
+| [SPEC-0010](0010-casa-init-distribui-as-skills-casa-do-ciclo-de-entrega.md) | casa-init distribui as skills casa-* do ciclo de entrega | implemented |
