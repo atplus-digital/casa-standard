@@ -20,3 +20,4 @@
 | [ADR-0014](0014-onde-a-ui-mora-adr-de-sistema-estados-na-spec-design-ref-nao-normativo.md) | Onde a UI mora: ADR de sistema, estados na spec, design-ref não-normativo | accepted |
 | [ADR-0016](0016-deteccao-agendada-de-contrato-desatualizado-fora-do-gate.md) | Detecção agendada de contrato desatualizado — rede fora do gate, aviso no tracker | accepted |
 | [ADR-0017](0017-ciclo-de-entrega-como-agent-skills.md) | Ciclo de entrega como Agent Skills: o agente executa o §9; verificação por agente é assistiva, nunca gate | accepted |
+| [ADR-0018](0018-site-publico-no-github-pages-compilado-das-fontes-canonicas-sem-segunda-fonte-de-verdade.md) | Site público no GitHub Pages compilado das fontes canônicas sem segunda fonte de verdade | accepted |

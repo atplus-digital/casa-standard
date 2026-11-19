@@ -1,0 +1,1868 @@
+#!/usr/bin/env python3
+"""build-site — Compila o site estático do CASA Standard a partir das fontes canônicas.
+
+Zero dependências externas (apenas stdlib do Python 3). Lê diretamente:
+  - STANDARD.md, README.md e CHANGELOG.md
+  - docs/index.json, docs/adr/*.md e docs/specs/*.md
+  - docs/templates/skills/*/SKILL.md
+  - site/{style.css,app.js,favicon.svg}
+
+Não duplica prosa normativa (Princípio 2 / ADR-0018) e emite HTML estático
+determinístico com links internos relativos (compatível com subpath no GitHub Pages).
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import re
+import shutil
+import sys
+import unicodedata
+from pathlib import Path
+from typing import Any
+
+GITHUB_REPO_URL = "https://github.com/atplus-digital/casa-standard"
+SKILL_CYCLE_ORDER = [
+    "casa-explore",
+    "casa-propose",
+    "casa-apply",
+    "casa-verify",
+    "casa-close",
+]
+
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCE_OPEN_RE = re.compile(r"^(\s*)(`{3,}|~{3,})([^\n`]*)$")
+HEADING_RE = re.compile(r"^(#{1,4})\s+(.+?)\s*$")
+HR_RE = re.compile(r"^\s*(?:---+|\*\*\*+)\s*$")
+BLOCKQUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
+TABLE_SEP_RE = re.compile(r"^\s*\|[\s:\-|]+\|\s*$")
+LIST_ITEM_RE = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.+?)\s*$")
+DOC_REF_RE = re.compile(r"(?:casa-standard:)?\b(ADR-\d{4}|SPEC-\d{4})\b")
+INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1")
+MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+ITALIC_RE = re.compile(r"(?<!\*)\*(?!\s|\*)(.+?)(?<!\s|\*)\*(?!\*)")
+
+
+def slugify(text: str) -> str:
+    norm = unicodedata.normalize("NFKD", text)
+    ascii_text = norm.encode("ascii", "ignore").decode("ascii").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_text).strip("-")
+    return slug or "secao"
+
+
+def standard_heading_id(raw_heading: str, used: set[str]) -> str:
+    clean = re.sub(r"`([^`]+)`", r"\1", raw_heading).strip()
+    m_sec = re.match(r"^(\d+(?:\.\d+)*)\.?\s+", clean)
+    if m_sec:
+        base = "sec-" + m_sec.group(1).replace(".", "-")
+    elif clean.lower().startswith("apêndice a") or clean.lower().startswith("apendice a"):
+        base = "apendice-a"
+    else:
+        base = slugify(clean)
+    candidate = base
+    idx = 2
+    while candidate in used:
+        candidate = f"{base}-{idx}"
+        idx += 1
+    used.add(candidate)
+    return candidate
+
+
+def strip_comments_outside_fences(md_text: str) -> str:
+    lines = md_text.splitlines()
+    out: list[str] = []
+    buf: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+
+    def flush_prose() -> None:
+        if not buf:
+            return
+        joined = "\n".join(buf)
+        cleaned = HTML_COMMENT_RE.sub("", joined)
+        out.extend(cleaned.split("\n"))
+        buf.clear()
+
+    for line in lines:
+        if not in_fence:
+            m = FENCE_OPEN_RE.match(line)
+            if m and "\u200b" not in line[: len(m.group(1)) + len(m.group(2))]:
+                flush_prose()
+                in_fence = True
+                fence_char = m.group(2)[0]
+                fence_len = len(m.group(2))
+                out.append(line)
+            else:
+                buf.append(line)
+        else:
+            out.append(line)
+            stripped = line.strip()
+            if (
+                not line.lstrip().startswith("\u200b")
+                and stripped
+                and all(ch == fence_char for ch in stripped)
+                and len(stripped) >= fence_len
+            ):
+                in_fence = False
+    flush_prose()
+    return "\n".join(out)
+
+
+def parse_frontmatter(md_text: str) -> tuple[dict[str, Any], str]:
+    lines = md_text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, md_text
+    end_idx = None
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            end_idx = idx
+            break
+    if end_idx is None:
+        return {}, md_text
+
+    fm: dict[str, Any] = {}
+    current_list_key: str | None = None
+    for raw in lines[1:end_idx]:
+        line = re.sub(r"\s+#.*$", "", raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("- ") and current_list_key is not None:
+            item = line[2:].strip().strip("\"'")
+            fm[current_list_key].append(item)
+            continue
+        current_list_key = None
+        if ":" in line:
+            key, val = line.split(":", 1)
+            key = key.strip()
+            val = val.strip()
+            if not val:
+                fm[key] = []
+                current_list_key = key
+            elif val.startswith("[") and val.endswith("]"):
+                inner = val[1:-1].strip()
+                fm[key] = (
+                    [x.strip().strip("\"'") for x in inner.split(",") if x.strip()]
+                    if inner
+                    else []
+                )
+            elif val == "null":
+                fm[key] = None
+            else:
+                fm[key] = val.strip("\"'")
+    body = "\n".join(lines[end_idx + 1 :])
+    return fm, body
+
+
+def extract_truth_callout(body: str) -> tuple[str | None, str]:
+    cleaned = strip_comments_outside_fences(body)
+    lines = cleaned.splitlines()
+    idx = 0
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    quote_lines: list[str] = []
+    start = idx
+    while idx < len(lines):
+        m = BLOCKQUOTE_RE.match(lines[idx])
+        if m:
+            quote_lines.append(m.group(1).strip())
+            idx += 1
+        else:
+            break
+    joined = " ".join(quote_lines).strip()
+    if quote_lines and "VERDADE ATUAL" in joined:
+        remaining = "\n".join(lines[:start] + lines[idx:])
+        return joined, remaining
+    return None, body
+
+
+def split_table_row(line: str) -> list[str]:
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    cells: list[str] = []
+    cur: list[str] = []
+    in_code = False
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "`":
+            in_code = not in_code
+            cur.append(ch)
+        elif ch == "\\" and i + 1 < len(s) and s[i + 1] == "|":
+            cur.append("|")
+            i += 1
+        elif ch == "|" and not in_code:
+            cells.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    cells.append("".join(cur).strip())
+    return cells
+
+
+def plain_text_from_md(md_text: str, max_len: int = 220) -> str:
+    cleaned = strip_comments_outside_fences(md_text)
+    cleaned = re.sub(r"```.*?```", " ", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"^#{1,6}\s+", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"[`*_>|]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 1].rstrip() + "…"
+
+
+class MarkdownRenderer:
+    def __init__(
+        self,
+        doc_urls: dict[str, str],
+        rel_root: str,
+        page_slug: str,
+        current_doc_id: str | None = None,
+    ) -> None:
+        self.doc_urls = doc_urls
+        self.rel_root = rel_root
+        self.page_slug = page_slug
+        self.current_doc_id = current_doc_id
+        self.code_counter = 0
+
+    def render_inline(self, text: str, allow_autolink: bool = True) -> str:
+        code_tokens: list[str] = []
+        link_tokens: list[str] = []
+
+        def save_code(match: re.Match[str]) -> str:
+            idx = len(code_tokens)
+            code_tokens.append(f"<code>{html.escape(match.group(2), quote=False)}</code>")
+            return f"\x00CODE{idx}\x00"
+
+        work = INLINE_CODE_RE.sub(save_code, text)
+
+        def save_link(match: re.Match[str]) -> str:
+            label_raw = match.group(1)
+            href_raw = match.group(2).strip()
+            label_html = self.render_inline(label_raw, allow_autolink=False)
+            resolved_href = self._resolve_md_href(href_raw)
+            ext_attrs = (
+                ' target="_blank" rel="noopener noreferrer"'
+                if resolved_href.startswith(("http://", "https://"))
+                else ""
+            )
+            idx = len(link_tokens)
+            link_tokens.append(
+                f'<a href="{html.escape(resolved_href, quote=True)}"{ext_attrs}>{label_html}</a>'
+            )
+            return f"\x00LINK{idx}\x00"
+
+        work = MD_LINK_RE.sub(save_link, work)
+        work = html.escape(work, quote=False)
+        work = BOLD_RE.sub(r"<strong>\1</strong>", work)
+        work = ITALIC_RE.sub(r"<em>\1</em>", work)
+
+        if allow_autolink:
+            def link_doc_ref(match: re.Match[str]) -> str:
+                full = match.group(0)
+                doc_id = match.group(1)
+                if doc_id in self.doc_urls and doc_id != self.current_doc_id:
+                    href = f"{self.rel_root}{self.doc_urls[doc_id]}"
+                    return f'<a class="doc-inline-ref" href="{html.escape(href, quote=True)}">{full}</a>'
+                return full
+
+            work = DOC_REF_RE.sub(link_doc_ref, work)
+
+        for idx, val in enumerate(link_tokens):
+            work = work.replace(f"\x00LINK{idx}\x00", val)
+        for idx, val in enumerate(code_tokens):
+            work = work.replace(f"\x00CODE{idx}\x00", val)
+        return work
+
+    def _resolve_md_href(self, href: str) -> str:
+        if href in ("STANDARD.md", "./STANDARD.md"):
+            return f"{self.rel_root}standard/"
+        if href in ("CHANGELOG.md", "./CHANGELOG.md"):
+            return f"{self.rel_root}changelog/"
+        if href.startswith("https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md"):
+            return f"{self.rel_root}standard/"
+        if href in ("docs/templates/", "scripts/docs-check", "LICENSE", "CONTRIBUTING.md"):
+            kind = "tree" if href.endswith("/") else "blob"
+            return f"{GITHUB_REPO_URL}/{kind}/main/{href.rstrip('/')}"
+        return href
+
+    def render(
+        self,
+        md_text: str,
+        *,
+        skip_first_h1: bool = False,
+        heading_offset: int = 0,
+        standard_ids: bool = False,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        cleaned = strip_comments_outside_fences(md_text)
+        lines = cleaned.splitlines()
+        out: list[str] = []
+        toc: list[dict[str, Any]] = []
+        used_ids: set[str] = set()
+        skipped_h1 = False
+        i = 0
+        n = len(lines)
+
+        while i < n:
+            line = lines[i]
+            if not line.strip():
+                i += 1
+                continue
+
+            # Fenced code block
+            m_fence = FENCE_OPEN_RE.match(line)
+            if m_fence and "\u200b" not in line[: len(m_fence.group(1)) + len(m_fence.group(2))]:
+                fence_char = m_fence.group(2)[0]
+                fence_len = len(m_fence.group(2))
+                lang = m_fence.group(3).strip() or "texto"
+                i += 1
+                code_lines: list[str] = []
+                while i < n:
+                    cur = lines[i]
+                    stripped = cur.strip()
+                    if (
+                        not cur.lstrip().startswith("\u200b")
+                        and stripped
+                        and all(ch == fence_char for ch in stripped)
+                        and len(stripped) >= fence_len
+                    ):
+                        i += 1
+                        break
+                    code_lines.append(cur.replace("\u200b```", "```"))
+                    i += 1
+                self.code_counter += 1
+                code_id = f"code-{self.page_slug}-{self.code_counter}"
+                escaped_code = html.escape("\n".join(code_lines), quote=False)
+                out.append(
+                    f'<div class="code-frame">'
+                    f'<div class="code-frame-bar">'
+                    f"<span>{html.escape(lang)}</span>"
+                    f'<button type="button" class="copy-btn" data-copy-target="{code_id}">Copiar</button>'
+                    f"</div>"
+                    f'<pre><code id="{code_id}">{escaped_code}</code></pre>'
+                    f"</div>"
+                )
+                continue
+
+            # Horizontal rule
+            if HR_RE.match(line):
+                out.append("<hr>")
+                i += 1
+                continue
+
+            # Heading
+            m_head = HEADING_RE.match(line)
+            if m_head:
+                raw_level = len(m_head.group(1))
+                raw_title = m_head.group(2).strip()
+                if raw_level == 1 and skip_first_h1 and not skipped_h1:
+                    skipped_h1 = True
+                    i += 1
+                    continue
+                level = min(4, raw_level + heading_offset)
+                if raw_level == 1 and skip_first_h1:
+                    level = max(2, level)
+                if level == 1:
+                    out.append(f"<h1>{self.render_inline(raw_title)}</h1>")
+                else:
+                    hid = (
+                        standard_heading_id(raw_title, used_ids)
+                        if standard_ids
+                        else standard_heading_id(slugify(raw_title), used_ids)
+                    )
+                    if standard_ids:
+                        pass
+                    else:
+                        # Preserve readable slug without double-slugifying
+                        used_ids.discard(hid)
+                        base = slugify(re.sub(r"`([^`]+)`", r"\1", raw_title))
+                        hid = base
+                        c = 2
+                        while hid in used_ids:
+                            hid = f"{base}-{c}"
+                            c += 1
+                        used_ids.add(hid)
+                    title_html = self.render_inline(raw_title)
+                    anchor = (
+                        f'<a class="heading-anchor" href="#{hid}" '
+                        f'aria-label="Link para esta seção">#</a>'
+                    )
+                    out.append(f'<h{level} id="{hid}">{title_html}{anchor}</h{level}>')
+                    if level in (2, 3):
+                        toc_label = re.sub(r"`([^`]+)`", r"\1", raw_title)
+                        toc_label = re.sub(r"\*\*(.+?)\*\*", r"\1", toc_label)
+                        toc.append({"id": hid, "level": level, "label": toc_label})
+                i += 1
+                continue
+
+            # Blockquote
+            if BLOCKQUOTE_RE.match(line):
+                bq_lines: list[str] = []
+                while i < n:
+                    m_bq = BLOCKQUOTE_RE.match(lines[i])
+                    if not m_bq:
+                        break
+                    bq_lines.append(m_bq.group(1))
+                    i += 1
+                inner_html, _ = self.render("\n".join(bq_lines), heading_offset=1)
+                out.append(f"<blockquote>{inner_html}</blockquote>")
+                continue
+
+            # GFM Table
+            if (
+                line.lstrip().startswith("|")
+                and i + 1 < n
+                and TABLE_SEP_RE.match(lines[i + 1])
+            ):
+                headers = split_table_row(lines[i])
+                i += 2
+                rows: list[list[str]] = []
+                while i < n and lines[i].lstrip().startswith("|"):
+                    rows.append(split_table_row(lines[i]))
+                    i += 1
+                th_html = "".join(f"<th>{self.render_inline(h)}</th>" for h in headers)
+                body_rows: list[str] = []
+                for r in rows:
+                    padded = r + [""] * max(0, len(headers) - len(r))
+                    tds = "".join(
+                        f"<td>{self.render_inline(cell)}</td>"
+                        for cell in padded[: len(headers)]
+                    )
+                    body_rows.append(f"<tr>{tds}</tr>")
+                out.append(
+                    f'<div class="table-wrap"><table>'
+                    f"<thead><tr>{th_html}</tr></thead>"
+                    f'<tbody>{"".join(body_rows)}</tbody>'
+                    f"</table></div>"
+                )
+                continue
+
+            # Lists (supports nested 2-level lists and multiline item continuations)
+            m_list = LIST_ITEM_RE.match(line)
+            if m_list:
+                list_html, i = self._parse_list(lines, i, len(m_list.group(1)))
+                out.append(list_html)
+                continue
+
+            # Paragraph
+            para_lines: list[str] = []
+            while i < n:
+                cur = lines[i]
+                if (
+                    not cur.strip()
+                    or HR_RE.match(cur)
+                    or HEADING_RE.match(cur)
+                    or BLOCKQUOTE_RE.match(cur)
+                    or LIST_ITEM_RE.match(cur)
+                    or (
+                        FENCE_OPEN_RE.match(cur)
+                        and not cur.lstrip().startswith("\u200b")
+                    )
+                    or (
+                        cur.lstrip().startswith("|")
+                        and i + 1 < n
+                        and TABLE_SEP_RE.match(lines[i + 1])
+                    )
+                    or (
+                        para_lines
+                        and cur.lstrip().startswith(("**Prós:**", "**Contras:**"))
+                    )
+                ):
+                    break
+                para_lines.append(cur.strip())
+                i += 1
+            if para_lines:
+                out.append(f'<p>{self.render_inline(" ".join(para_lines))}</p>')
+
+        return "\n".join(out), toc
+
+    def _parse_list(
+        self, lines: list[str], start_idx: int, base_indent: int
+    ) -> tuple[str, int]:
+        n = len(lines)
+        first_m = LIST_ITEM_RE.match(lines[start_idx])
+        assert first_m is not None
+        ordered = first_m.group(2).endswith(".")
+        tag = "ol" if ordered else "ul"
+        items_html: list[str] = []
+        i = start_idx
+
+        while i < n:
+            if not lines[i].strip():
+                # Look ahead: if next non-empty line is another item at base_indent or continuation, keep going
+                j = i + 1
+                while j < n and not lines[j].strip():
+                    j += 1
+                if j >= n:
+                    i = j
+                    break
+                m_next = LIST_ITEM_RE.match(lines[j])
+                if m_next and len(m_next.group(1)) >= base_indent:
+                    i = j
+                else:
+                    break
+
+            m_item = LIST_ITEM_RE.match(lines[i])
+            if not m_item:
+                break
+            indent = len(m_item.group(1))
+            item_ordered = m_item.group(2).endswith(".")
+            if indent < base_indent:
+                break
+            if indent == base_indent and item_ordered != ordered:
+                break
+            if indent > base_indent:
+                sub_html, i = self._parse_list(lines, i, indent)
+                if items_html:
+                    items_html[-1] = items_html[-1][:-5] + sub_html + "</li>"
+                continue
+
+            text_parts = [m_item.group(3).strip()]
+            subblocks: list[str] = []
+            i += 1
+            while i < n:
+                cur = lines[i]
+                if not cur.strip():
+                    break
+                if HR_RE.match(cur) or HEADING_RE.match(cur) or FENCE_OPEN_RE.match(cur):
+                    break
+                m_sub = LIST_ITEM_RE.match(cur)
+                if m_sub:
+                    sub_indent = len(m_sub.group(1))
+                    if sub_indent > base_indent:
+                        sub_html, i = self._parse_list(lines, i, sub_indent)
+                        subblocks.append(sub_html)
+                        continue
+                    break
+                lead_spaces = len(cur) - len(cur.lstrip(" "))
+                if lead_spaces > base_indent:
+                    text_parts.append(cur.strip())
+                    i += 1
+                else:
+                    break
+
+            item_inline = self.render_inline(" ".join(text_parts))
+            # Render checkbox syntax cleanly if present
+            if item_inline.startswith("[ ] "):
+                item_inline = "☐ " + item_inline[4:]
+            elif item_inline.lower().startswith("[x] "):
+                item_inline = "☑ " + item_inline[4:]
+            items_html.append(f'<li>{item_inline}{"".join(subblocks)}</li>')
+
+        return f'<{tag}>{"".join(items_html)}</{tag}>', i
+
+
+def status_badge(status: str) -> str:
+    s = (status or "unknown").lower()
+    if s in ("accepted", "implemented"):
+        cls = "badge-ok"
+    elif s in ("proposed", "draft"):
+        cls = "badge-warn"
+    else:
+        cls = "badge-muted"
+    return f'<span class="badge {cls}">{html.escape(s)}</span>'
+
+
+def parse_standard_metadata(standard_md: str) -> dict[str, str]:
+    m_ver = re.search(r"\*\*Versão CASA:\*\*\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)", standard_md)
+    m_status = re.search(r"\*\*Status:\*\*\s*([^·\n]+)", standard_md)
+    m_maint = re.search(r"\*\*Mantenedor:\*\*\s*([^\n]+)", standard_md)
+    m_crit = re.search(r"Critério de design:\s*\*\*(.+?)\*\*", standard_md)
+    return {
+        "version": m_ver.group(1).strip() if m_ver else "1.0",
+        "status": m_status.group(1).strip() if m_status else "accepted",
+        "maintainer": m_maint.group(1).strip() if m_maint else "atplus-digital",
+        "criterion": (
+            m_crit.group(1).strip()
+            if m_crit
+            else "complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece."
+        ),
+    }
+
+
+def load_canonical_docs(root: Path) -> list[dict[str, Any]]:
+    index_path = root / "docs" / "index.json"
+    raw_items: list[dict[str, Any]] = json.loads(index_path.read_text(encoding="utf-8"))
+    docs: list[dict[str, Any]] = []
+
+    for entry in raw_items:
+        rel_path = entry["path"]
+        file_path = root / rel_path
+        stem = Path(rel_path).stem
+        layer = entry["layer"]  # "adr" or "specs"
+        url_rel = f"{layer}/{stem}/"
+
+        fm: dict[str, Any] = {}
+        body = ""
+        title = entry.get("title", entry["id"])
+        truth_callout: str | None = None
+
+        if file_path.is_file():
+            raw_md = file_path.read_text(encoding="utf-8")
+            fm, body = parse_frontmatter(raw_md)
+            truth_callout, body_without_truth = extract_truth_callout(body)
+            body = body_without_truth
+            cleaned_for_h1 = strip_comments_outside_fences(body)
+            m_h1 = re.search(r"^#\s+(.+?)\s*$", cleaned_for_h1, re.MULTILINE)
+            if m_h1:
+                title = m_h1.group(1).strip()
+
+        builds_on = fm.get("builds-on", entry.get("builds-on", []))
+        if not isinstance(builds_on, list):
+            builds_on = [builds_on] if builds_on else []
+        impl_by = fm.get("implemented-by", entry.get("implemented-by", []))
+        if not isinstance(impl_by, list):
+            impl_by = [impl_by] if impl_by else []
+        deciders = fm.get("deciders", [])
+        if not isinstance(deciders, list):
+            deciders = [deciders] if deciders else []
+
+        docs.append(
+            {
+                "id": entry["id"],
+                "path": rel_path,
+                "stem": stem,
+                "layer": layer,
+                "url": url_rel,
+                "title": title,
+                "status": str(fm.get("status") or entry.get("status") or "draft"),
+                "date": str(fm.get("date") or ""),
+                "builds_on": [str(x) for x in builds_on if x],
+                "superseded_by": fm.get("superseded-by", entry.get("superseded-by")),
+                "implemented_by": [str(x) for x in impl_by if x],
+                "deciders": [str(x) for x in deciders if x],
+                "design_ref": fm.get("design-ref") or entry.get("design-ref"),
+                "truth_callout": truth_callout,
+                "body": body,
+            }
+        )
+
+    docs.sort(key=lambda d: (0 if d["layer"] == "adr" else 1, d["id"]))
+    by_id = {d["id"]: d for d in docs}
+    for d in docs:
+        d["cited_by"] = []
+        d["supersedes"] = []
+
+    for d in docs:
+        for parent_id in d["builds_on"]:
+            if parent_id in by_id and d["id"] not in by_id[parent_id]["cited_by"]:
+                by_id[parent_id]["cited_by"].append(d["id"])
+        sup_target = d.get("superseded_by")
+        if sup_target and sup_target in by_id:
+            if d["id"] not in by_id[sup_target]["supersedes"]:
+                by_id[sup_target]["supersedes"].append(d["id"])
+
+    return docs
+
+
+def load_skills(root: Path) -> list[dict[str, Any]]:
+    skills_root = root / "docs" / "templates" / "skills"
+    found: dict[str, dict[str, Any]] = {}
+    if skills_root.is_dir():
+        for skill_file in sorted(skills_root.glob("*/SKILL.md")):
+            raw = skill_file.read_text(encoding="utf-8")
+            fm, body = parse_frontmatter(raw)
+            name = str(fm.get("name") or skill_file.parent.name)
+            desc = str(fm.get("description") or "")
+            m_h1 = re.search(r"^#\s+(.+?)\s*$", body, re.MULTILINE)
+            h1 = m_h1.group(1).strip() if m_h1 else name
+            found[name] = {
+                "name": name,
+                "title": h1,
+                "description": desc,
+                "desc_chars": len(desc),
+                "path": f"docs/templates/skills/{skill_file.parent.name}/SKILL.md",
+                "body": body,
+            }
+    ordered: list[dict[str, Any]] = []
+    for key in SKILL_CYCLE_ORDER:
+        if key in found:
+            ordered.append(found.pop(key))
+    for key in sorted(found):
+        ordered.append(found[key])
+    return ordered
+
+
+def build_causal_svg(docs: list[dict[str, Any]], rel_root: str) -> str:
+    by_id = {d["id"]: d for d in docs}
+    memo: dict[str, int] = {}
+
+    def get_rank(did: str, stack: set[str]) -> int:
+        if did in memo:
+            return memo[did]
+        if did in stack:
+            return 0
+        stack.add(did)
+        parents = [p for p in by_id[did]["builds_on"] if p in by_id and p != did]
+        r = 0 if not parents else 1 + max(get_rank(p, stack) for p in parents)
+        stack.remove(did)
+        memo[did] = r
+        return r
+
+    columns: dict[int, list[dict[str, Any]]] = {}
+    for d in docs:
+        r = get_rank(d["id"], set())
+        columns.setdefault(r, []).append(d)
+
+    num_cols = max(columns.keys(), default=0) + 1
+    max_rows = max((len(v) for v in columns.values()), default=1)
+
+    node_w = 136
+    node_h = 46
+    col_gap = 166
+    row_gap = 60
+    pad_x = 20
+    pad_y = 22
+
+    svg_w = max(780, pad_x * 2 + (num_cols - 1) * col_gap + node_w)
+    svg_h = max(240, pad_y * 2 + max_rows * row_gap)
+
+    coords: dict[str, tuple[float, float]] = {}
+    for col_idx in sorted(columns):
+        col_docs = columns[col_idx]
+        total_h = len(col_docs) * node_h + max(0, len(col_docs) - 1) * (row_gap - node_h)
+        start_y = (svg_h - total_h) / 2.0
+        x = float(pad_x + col_idx * col_gap)
+        for row_idx, d in enumerate(col_docs):
+            y = start_y + row_idx * row_gap
+            coords[d["id"]] = (x, y)
+
+    edge_elems: list[str] = []
+    for d in docs:
+        x2, y2 = coords[d["id"]]
+        cy2 = y2 + node_h / 2.0
+        for parent_id in d["builds_on"]:
+            if parent_id not in coords:
+                continue
+            x1, y1 = coords[parent_id]
+            sx = x1 + node_w
+            sy = y1 + node_h / 2.0
+            tx = x2
+            dx = max(36.0, abs(tx - sx) * 0.45)
+            path_d = f"M {sx:.1f} {sy:.1f} C {sx + dx:.1f} {sy:.1f}, {tx - dx:.1f} {cy2:.1f}, {tx:.1f} {cy2:.1f}"
+            edge_elems.append(
+                f'<path class="graph-edge" data-from="{parent_id}" data-to="{d["id"]}" d="{path_d}"/>'
+            )
+        sup_target = d.get("superseded_by")
+        if sup_target and sup_target in coords:
+            x1, y1 = coords[d["id"]]
+            tx_n, ty_n = coords[sup_target]
+            sx = x1 + node_w
+            sy = y1 + node_h / 2.0
+            tx = tx_n
+            ty = ty_n + node_h / 2.0
+            dx = max(36.0, abs(tx - sx) * 0.45)
+            path_d = f"M {sx:.1f} {sy:.1f} C {sx + dx:.1f} {sy:.1f}, {tx - dx:.1f} {ty:.1f}, {tx:.1f} {ty:.1f}"
+            edge_elems.append(
+                f'<path class="graph-edge graph-edge-superseded" data-from="{d["id"]}" data-to="{sup_target}" d="{path_d}"/>'
+            )
+
+    node_elems: list[str] = []
+    for d in docs:
+        x, y = coords[d["id"]]
+        href = f'{rel_root}{d["url"]}'
+        short_title = d["title"]
+        if len(short_title) > 20:
+            short_title = short_title[:19].rstrip() + "…"
+        aria = f'{d["id"]}: {d["title"]} ({d["status"]})'
+        node_elems.append(
+            f'<g class="graph-node node-{d["layer"]}" data-id="{d["id"]}" '
+            f'data-href="{html.escape(href, quote=True)}" tabindex="0" role="link" '
+            f'aria-label="{html.escape(aria, quote=True)}">'
+            f"<title>{html.escape(aria)}</title>"
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{node_w}" height="{node_h}" rx="5" ry="5"/>'
+            f'<text x="{x + 10:.1f}" y="{y + 19:.1f}">{html.escape(d["id"])}</text>'
+            f'<text class="node-sub" x="{x + 10:.1f}" y="{y + 34:.1f}">{html.escape(short_title)}</text>'
+            f"</g>"
+        )
+
+    return (
+        f'<svg id="causal-graph-svg" class="causal-svg" '
+        f'viewBox="0 0 {svg_w} {svg_h}" role="img" '
+        f'aria-label="Mapa causal interativo de ADRs e Specs do CASA Standard">'
+        f'<g class="graph-edges">{"".join(edge_elems)}</g>'
+        f'<g class="graph-nodes">{"".join(node_elems)}</g>'
+        f"</svg>"
+    )
+
+
+def render_shell(
+    *,
+    title: str,
+    description: str,
+    rel_root: str,
+    page_url: str,
+    base_url: str,
+    casa_version: str,
+    total_docs: int,
+    total_skills: int,
+    active_nav: str,
+    main_html: str,
+) -> str:
+    canonical_url = base_url.rstrip("/") + "/" + page_url.lstrip("/") if base_url else ""
+    canonical_tag = (
+        f'\n  <link rel="canonical" href="{html.escape(canonical_url, quote=True)}">'
+        f'\n  <meta property="og:url" content="{html.escape(canonical_url, quote=True)}">'
+        if canonical_url
+        else ""
+    )
+
+    def nav_attr(key: str) -> str:
+        return ' aria-current="page"' if active_nav == key else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR" data-site-root="{rel_root}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)}</title>
+  <meta name="description" content="{html.escape(description, quote=True)}">
+  <meta property="og:title" content="{html.escape(title, quote=True)}">
+  <meta property="og:description" content="{html.escape(description, quote=True)}">
+  <meta property="og:type" content="website">{canonical_tag}
+  <link rel="icon" type="image/svg+xml" href="{rel_root}assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{rel_root}assets/style.css">
+  <script>
+    (function () {{
+      try {{
+        var saved = localStorage.getItem("casa-theme");
+        var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.setAttribute("data-theme", saved || (dark ? "dark" : "light"));
+      }} catch (e) {{
+        document.documentElement.setAttribute("data-theme", "light");
+      }}
+    }})();
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Pular para o conteúdo principal</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="{rel_root}" id="brand-home-link">
+        <img class="brand-mark" src="{rel_root}assets/favicon.svg" alt="" width="24" height="24">
+        <span>CASA Standard</span>
+        <span class="brand-version">v{html.escape(casa_version)}</span>
+      </a>
+
+      <nav class="primary-nav" id="primary-nav" aria-label="Navegação principal">
+        <a class="nav-link" href="{rel_root}"{nav_attr("home")}>Visão geral</a>
+        <a class="nav-link" href="{rel_root}standard/"{nav_attr("standard")}>Standard</a>
+        <a class="nav-link" href="{rel_root}grafo/"{nav_attr("grafo")}>Grafo ({total_docs})</a>
+        <a class="nav-link" href="{rel_root}skills/"{nav_attr("skills")}>Skills ({total_skills})</a>
+        <a class="nav-link" href="{rel_root}changelog/"{nav_attr("changelog")}>Changelog</a>
+      </nav>
+
+      <div class="header-actions">
+        <button type="button" class="search-trigger" id="search-open-btn" aria-label="Buscar na documentação">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="20" y1="20" x2="16.2" y2="16.2"></line>
+          </svg>
+          <span class="search-trigger-label">Buscar…</span>
+          <kbd class="kbd">⌘K</kbd>
+        </button>
+
+        <button type="button" class="icon-btn" id="theme-toggle-btn" aria-label="Alternar tema claro ou escuro" title="Alternar tema">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+          </svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+          </svg>
+        </button>
+
+        <a class="icon-btn" id="github-repo-link" href="{GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Repositório no GitHub" title="Ver no GitHub">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.09 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56v-2.02c-3.2.7-3.88-1.39-3.88-1.39-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/>
+          </svg>
+        </a>
+
+        <button type="button" class="icon-btn mobile-menu-btn" id="mobile-menu-btn" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7"></line>
+            <line x1="4" y1="12" x2="20" y2="12"></line>
+            <line x1="4" y1="17" x2="20" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+{main_html}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>
+        CASA Standard v{html.escape(casa_version)} · Compilado das fontes canônicas sem texto duplicado · MIT © atplus-digital
+      </div>
+      <div class="footer-links">
+        <a href="{rel_root}standard/">STANDARD.md</a>
+        <a href="{rel_root}grafo/">Grafo ADRs &amp; Specs</a>
+        <a href="{rel_root}skills/">Agent Skills</a>
+        <a href="{rel_root}changelog/">Changelog</a>
+        <a href="{GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="search-backdrop" id="search-backdrop" role="dialog" aria-modal="true" aria-label="Buscar na documentação" hidden>
+    <div class="search-dialog">
+      <div class="search-input-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="20" y1="20" x2="16.2" y2="16.2"></line>
+        </svg>
+        <input type="search" class="search-modal-input" id="search-modal-input" placeholder="Buscar seções do STANDARD, ADRs, Specs ou skills…" autocomplete="off">
+        <kbd class="kbd">ESC</kbd>
+      </div>
+      <ul class="search-results" id="search-results-list"></ul>
+      <div class="empty-state" id="search-empty-state" hidden>
+        <p>Nenhum documento ou seção encontrado para este termo.</p>
+        <button type="button" class="btn btn-secondary" id="search-clear-btn">Limpar busca</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{rel_root}assets/app.js" defer></script>
+</body>
+</html>
+"""
+
+
+def render_toc_sidebar(toc_items: list[dict[str, Any]], label: str = "Nesta página") -> str:
+    if not toc_items:
+        return ""
+    lis: list[str] = []
+    for item in toc_items:
+        sub_cls = " toc-sub" if item["level"] == 3 else ""
+        lis.append(
+            f'<li><a class="toc-link{sub_cls}" href="#{item["id"]}">'
+            f'{html.escape(item["label"])}</a></li>'
+        )
+    return (
+        f'<aside class="toc-sidebar" aria-label="{html.escape(label)}">'
+        f'<p class="toc-title">{html.escape(label)}</p>'
+        f'<ul class="toc-list">{"".join(lis)}</ul>'
+        f"</aside>"
+    )
+
+
+def parse_readme_pillars(readme_md: str) -> list[dict[str, str]]:
+    pillars: list[dict[str, str]] = []
+    lines = readme_md.splitlines()
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Os quatro pilares":
+            j = idx + 1
+            while j < len(lines) and not lines[j].lstrip().startswith("|"):
+                j += 1
+            j += 2  # skip header + separator
+            while j < len(lines) and lines[j].lstrip().startswith("|"):
+                cells = split_table_row(lines[j])
+                if len(cells) >= 3:
+                    raw_name = re.sub(r"\*\*(.+?)\*\*", r"\1", cells[0]).strip()
+                    letter = raw_name[0].upper() if raw_name else "C"
+                    pillars.append(
+                        {
+                            "letter": letter,
+                            "name": raw_name,
+                            "what": cells[1],
+                            "where": re.sub(r"`([^`]+)`", r"\1", cells[2]),
+                        }
+                    )
+                j += 1
+            break
+    return pillars
+
+
+def build_home_page(
+    *,
+    meta: dict[str, str],
+    pillars: list[dict[str, str]],
+    docs: list[dict[str, Any]],
+    skills: list[dict[str, Any]],
+    doc_urls: dict[str, str],
+) -> str:
+    adr_count = sum(1 for d in docs if d["layer"] == "adr")
+    spec_count = sum(1 for d in docs if d["layer"] == "specs")
+    ver = html.escape(meta["version"])
+    crit = html.escape(meta["criterion"])
+
+    home_renderer = MarkdownRenderer(doc_urls, "./", "home")
+
+    pillar_rows: list[str] = []
+    for p in pillars:
+        pillar_rows.append(
+            f'<div class="pillar-row">'
+            f'<div class="pillar-letter" aria-hidden="true">{html.escape(p["letter"])}</div>'
+            f"<div>"
+            f'<h3 class="pillar-title">{html.escape(p["name"])}</h3>'
+            f'<p class="pillar-desc">{home_renderer.render_inline(p["what"])}</p>'
+            f'<div class="pillar-where">{html.escape(p["where"])}</div>'
+            f"</div>"
+            f"</div>"
+        )
+
+    anatomy_items = [
+        (
+            "AGENTS.md",
+            "router · carga sempre",
+            "Camada 1 (teto ~150 linhas): metadados CASA, contexto em 5 linhas, DoD global executável, gotchas não-inferíveis e Mapa de contexto.",
+        ),
+        (
+            "CLAUDE.md",
+            "ponte de host",
+            "Importa @AGENTS.md para hosts que não leem AGENTS.md nativamente (ADR-0009). Criada uma vez pelo casa-init; nunca sobrescrita.",
+        ),
+        (
+            "docs/context/*.md",
+            "estado atual",
+            "Camada 2 sob demanda (INFRA, TESTS, CONVENTIONS…). Conteúdo imperativo e atemporal — retira dos ADRs a pressão de emenda.",
+        ),
+        (
+            "docs/adr/NNNN-*.md",
+            "decisões imutáveis",
+            "MADR 4.0 + seção Confirmação. Aceito em main, o corpo torna-se imutável no CI; mudança futura exige novo ADR que o supersede.",
+        ),
+        (
+            "docs/specs/NNNN-*.md",
+            "contratos + DoD",
+            "Fluxo, contrato, casos de borda em EARS e Definition of Done com comandos reais do repositório antes da implementação.",
+        ),
+        (
+            ".agents/skills/casa-*/",
+            "ciclo executável",
+            "As 5 Agent Skills (explore, propose, apply, verify, close) distribuídas pela toolchain em T1, também espelhadas em .claude/skills/.",
+        ),
+        (
+            "scripts/docs-check",
+            "gate determinístico",
+            "Validador em Python stdlib: verifica router, frontmatter fechado, grafo causal, imutabilidade de ADRs, higiene e frescor de índices.",
+        ),
+    ]
+
+    tree_lis: list[str] = []
+    for idx, (path_label, owner, desc) in enumerate(anatomy_items):
+        selected = "true" if idx == 0 else "false"
+        tree_lis.append(
+            f"<li>"
+            f'<button type="button" class="tree-item-btn" '
+            f'aria-selected="{selected}" '
+            f'data-tree-title="{html.escape(path_label, quote=True)}" '
+            f'data-tree-path="{html.escape(path_label, quote=True)}" '
+            f'data-tree-desc="{html.escape(desc, quote=True)}">'
+            f"<span>{html.escape(path_label)}</span>"
+            f'<span class="tree-owner">{html.escape(owner)}</span>'
+            f"</button>"
+            f"</li>"
+        )
+
+    step_btns: list[str] = []
+    step_panes: list[str] = []
+    for idx, sk in enumerate(skills):
+        selected = "true" if idx == 0 else "false"
+        hidden_attr = "" if idx == 0 else " hidden"
+        pane_id = f'cycle-pane-{sk["name"]}'
+        step_btns.append(
+            f'<button type="button" class="cycle-step-btn" role="tab" '
+            f'id="tab-{sk["name"]}" aria-selected="{selected}" aria-controls="{pane_id}">'
+            f'<span class="cycle-step-idx">0{idx + 1} · etapa</span>'
+            f'<span class="cycle-step-name">{html.escape(sk["name"])}</span>'
+            f"</button>"
+        )
+        step_panes.append(
+            f'<div class="cycle-preview" id="{pane_id}" role="tabpanel" '
+            f'aria-labelledby="tab-{sk["name"]}"{hidden_attr}>'
+            f'<div class="cycle-preview-head">'
+            f'<strong>{html.escape(sk["title"])}</strong>'
+            f'<a href="./skills/#{html.escape(sk["name"])}">Ler procedimento completo →</a>'
+            f"</div>"
+            f'<p style="margin:0;color:var(--ink-secondary);font-size:0.93rem;">'
+            f'{html.escape(sk["description"])}</p>'
+            f"</div>"
+        )
+
+    recent_docs = sorted(docs, key=lambda d: (d["date"], d["id"]), reverse=True)[:6]
+    recent_rows: list[str] = []
+    for d in recent_docs:
+        recent_rows.append(
+            f"<tr>"
+            f'<td><a class="doc-ref-chip" href="./{html.escape(d["url"], quote=True)}">{html.escape(d["id"])}</a></td>'
+            f'<td><a href="./{html.escape(d["url"], quote=True)}">{html.escape(d["title"])}</a></td>'
+            f'<td>{status_badge(d["status"])}</td>'
+            f'<td style="font-family:var(--font-mono);font-size:0.78rem;color:var(--ink-muted);">{html.escape(d["date"])}</td>'
+            f"</tr>"
+        )
+
+    return f"""
+    <section class="hero">
+      <div class="container">
+        <p class="eyebrow">Especificação normativa · Contrato v{ver} · {html.escape(meta["status"])}</p>
+        <div class="hero-grid">
+          <div>
+            <h1>Workflow de engenharia onde agentes operam sob garantias mecânicas.</h1>
+            <p class="hero-lead">
+              <strong>CASA</strong> (Contexto, ADRs, Specs, Automação) organiza decisões imutáveis,
+              contratos verificáveis, contexto em camadas de tokens e validação de CI sem dependências
+              para repositórios conduzidos por humanos e agentes de IA.
+            </p>
+            <blockquote class="thesis-quote">
+              “Critério de design: {crit}”
+            </blockquote>
+            <div class="hero-ctas">
+              <a class="btn btn-primary" href="./standard/" id="cta-read-standard">Ler o STANDARD v{ver}</a>
+              <a class="btn btn-secondary" href="./grafo/" id="cta-explore-graph">Explorar o grafo ({len(docs)} docs)</a>
+              <a class="btn btn-secondary" href="./skills/" id="cta-browse-skills">Catálogo de Skills</a>
+            </div>
+          </div>
+
+          <div class="quickstart-panel" data-tabs>
+            <div class="quickstart-tabs" role="tablist" aria-label="Modos de instalação do CASA Standard">
+              <button type="button" class="tab-btn" role="tab" id="qs-tab-1" aria-selected="true" aria-controls="qs-pane-1">curl | sh</button>
+              <button type="button" class="tab-btn" role="tab" id="qs-tab-2" aria-selected="false" aria-controls="qs-pane-2">auditar antes</button>
+              <button type="button" class="tab-btn" role="tab" id="qs-tab-3" aria-selected="false" aria-controls="qs-pane-3">validar local</button>
+            </div>
+            <div class="quickstart-body">
+              <div class="quickstart-pane" id="qs-pane-1" role="tabpanel" aria-labelledby="qs-tab-1">
+                <div class="cmd-box">
+                  <button type="button" class="copy-btn" id="copy-qs-1" data-copy-target="cmd-qs-1">Copiar</button>
+                  <code id="cmd-qs-1">curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- . --repo-id meu-repo</code>
+                </div>
+                <p class="quickstart-caption">
+                  Aditivo e idempotente: instala <code>scripts/docs-check</code>, templates, skills <code>casa-*</code>,
+                  ponte <code>CLAUDE.md</code> e o gate automatizado sem tocar no conteúdo do repositório.
+                </p>
+              </div>
+
+              <div class="quickstart-pane" id="qs-pane-2" role="tabpanel" aria-labelledby="qs-tab-2" hidden>
+                <div class="cmd-box">
+                  <button type="button" class="copy-btn" id="copy-qs-2" data-copy-target="cmd-qs-2">Copiar</button>
+                  <code id="cmd-qs-2">curl -fsSLO https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh
+less install.sh
+sh install.sh . --repo-id meu-repo</code>
+                </div>
+                <p class="quickstart-caption">
+                  Para pinar uma revisão imutável, passe <code>CASA_REF=&lt;tag|sha&gt;</code> ao <code>sh</code>:
+                  <code>curl -fsSL …/install.sh | CASA_REF=main sh -s -- . --repo-id meu-repo</code>.
+                </p>
+              </div>
+
+              <div class="quickstart-pane" id="qs-pane-3" role="tabpanel" aria-labelledby="qs-tab-3" hidden>
+                <div class="cmd-box">
+                  <button type="button" class="copy-btn" id="copy-qs-3" data-copy-target="cmd-qs-3">Copiar</button>
+                  <code id="cmd-qs-3">python3 scripts/docs-check
+python3 scripts/docs-check --emit-index</code>
+                </div>
+                <p class="quickstart-caption">
+                  Zero dependências externas (Python 3 stdlib). Mesmo comando executado pelo gate de CI e pelo hook local.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Indicadores do repositório de referência">
+      <div class="metrics-strip container" style="padding:0;">
+        <a class="metric-cell" href="./standard/">
+          <span class="metric-value">v{ver}</span>
+          <span class="metric-label">Contrato CASA vigente</span>
+        </a>
+        <a class="metric-cell" href="./grafo/">
+          <span class="metric-value">{adr_count} ADRs · {spec_count} Specs</span>
+          <span class="metric-label">Dogfooding no próprio repo</span>
+        </a>
+        <a class="metric-cell" href="./skills/">
+          <span class="metric-value">{len(skills)} Skills</span>
+          <span class="metric-label">Ciclo §9 em Agent Skills</span>
+        </a>
+        <div class="metric-cell">
+          <span class="metric-value">0 deps</span>
+          <span class="metric-label">Python 3 stdlib pura</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="container">
+        <div class="section-header">
+          <div>
+            <span class="section-num">§1–§4 · Arquitetura documental</span>
+            <h2 class="section-title">Os quatro pilares e a anatomia no repositório</h2>
+            <p class="section-sub">
+              Cada artefato ocupa uma camada de custo de contexto e responde a um único papel:
+              estado atual mutável não se mistura com decisão histórica imutável.
+            </p>
+          </div>
+        </div>
+
+        <div class="pillars-layout">
+          <div class="pillars-ledger">
+            {"".join(pillar_rows)}
+          </div>
+
+          <div class="anatomy-box">
+            <div class="anatomy-head">
+              <span>inspecionar árvore T1</span>
+              <span>clique num caminho</span>
+            </div>
+            <ul class="tree-list" aria-label="Arquivos de um repositório CASA T1">
+              {"".join(tree_lis)}
+            </ul>
+            <div class="anatomy-detail" aria-live="polite">
+              <p class="anatomy-detail-title" id="anatomy-detail-title">{html.escape(anatomy_items[0][0])}</p>
+              <p class="anatomy-detail-body" id="anatomy-detail-body">{html.escape(anatomy_items[0][2])}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="container" data-tabs>
+        <div class="section-header">
+          <div>
+            <span class="section-num">§9 · Operação assistida</span>
+            <h2 class="section-title">Ciclo de vida de uma entrega como Agent Skills</h2>
+            <p class="section-sub">
+              Em repositórios T1, o <code>casa-init</code> distribui cinco procedimentos enxutos
+              que conduzem o agente da leitura do subgrafo ao fechamento atômico da Spec.
+            </p>
+          </div>
+          <a class="btn btn-secondary" href="./skills/">Abrir catálogo completo</a>
+        </div>
+
+        <div class="cycle-stepper" role="tablist" aria-label="Etapas do ciclo CASA">
+          {"".join(step_btns)}
+        </div>
+        {"".join(step_panes)}
+      </div>
+    </section>
+
+    <section class="home-section" style="border-bottom:none;">
+      <div class="container">
+        <div class="section-header">
+          <div>
+            <span class="section-num">§5 · Rastreabilidade real</span>
+            <h2 class="section-title">Decisões e contratos recentes do próprio padrão</h2>
+            <p class="section-sub">
+              O <code>casa-standard</code> opera sob suas próprias regras: toda evolução da especificação
+              e da toolchain nasce de ADR e Spec auditados pelo mesmo <code>docs-check</code>.
+            </p>
+          </div>
+          <a class="btn btn-secondary" href="./grafo/">Ver grafo completo ({len(docs)})</a>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Título</th>
+                <th>Status</th>
+                <th>Data</th>
+              </tr>
+            </thead>
+            <tbody>
+              {"".join(recent_rows)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+"""
+
+
+def build_doc_page(
+    doc: dict[str, Any],
+    by_id: dict[str, dict[str, Any]],
+    doc_urls: dict[str, str],
+) -> tuple[str, list[dict[str, Any]]]:
+    rel_root = "../../"
+    renderer = MarkdownRenderer(
+        doc_urls, rel_root, slugify(doc["id"]), current_doc_id=doc["id"]
+    )
+    body_html, toc = renderer.render(doc["body"], skip_first_h1=True)
+
+    def render_ref_chips(ids: list[str]) -> str:
+        if not ids:
+            return '<span style="color:var(--ink-muted);font-size:0.82rem;">nenhum</span>'
+        chips: list[str] = []
+        for ref_id in ids:
+            if ref_id in by_id:
+                target = by_id[ref_id]
+                href = f'{rel_root}{target["url"]}'
+                chips.append(
+                    f'<a class="doc-ref-chip" href="{html.escape(href, quote=True)}" '
+                    f'title="{html.escape(target["title"], quote=True)}">{html.escape(ref_id)}</a>'
+                )
+            else:
+                chips.append(f'<span class="doc-ref-chip">{html.escape(ref_id)}</span>')
+        return "".join(chips)
+
+    passport_cells: list[str] = [
+        f'<div><span class="passport-key">Status</span><div class="passport-val">{status_badge(doc["status"])}</div></div>',
+        f'<div><span class="passport-key">Data</span><div class="passport-val" style="font-family:var(--font-mono);">{html.escape(doc["date"] or "—")}</div></div>',
+        f'<div><span class="passport-key">Fundamentado em (builds-on)</span><div class="passport-val">{render_ref_chips(doc["builds_on"])}</div></div>',
+        f'<div><span class="passport-key">Citado por (a jusante)</span><div class="passport-val">{render_ref_chips(doc["cited_by"])}</div></div>',
+    ]
+
+    if doc["layer"] == "adr" and doc["deciders"]:
+        dec_str = ", ".join(doc["deciders"])
+        passport_cells.append(
+            f'<div><span class="passport-key">Decisores</span><div class="passport-val" style="font-family:var(--font-mono);">{html.escape(dec_str)}</div></div>'
+        )
+
+    if doc.get("superseded_by"):
+        sup = str(doc["superseded_by"])
+        passport_cells.append(
+            f'<div><span class="passport-key">Superado por</span><div class="passport-val">{render_ref_chips([sup])}</div></div>'
+        )
+
+    if doc.get("supersedes"):
+        passport_cells.append(
+            f'<div><span class="passport-key">Substitui</span><div class="passport-val">{render_ref_chips(doc["supersedes"])}</div></div>'
+        )
+
+    if doc["layer"] == "specs" and doc["implemented_by"]:
+        impl_links = "".join(
+            f'<a class="doc-ref-chip" href="{GITHUB_REPO_URL}/blob/main/{html.escape(p, quote=True)}" '
+            f'target="_blank" rel="noopener noreferrer">{html.escape(p)}</a>'
+            for p in doc["implemented_by"]
+        )
+        passport_cells.append(
+            f'<div style="grid-column: 1 / -1;"><span class="passport-key">Implementado por (implemented-by)</span>'
+            f'<div class="passport-val">{impl_links}</div></div>'
+        )
+
+    truth_html = ""
+    if doc.get("truth_callout"):
+        truth_html = (
+            f'<div class="truth-callout" role="note">'
+            f'{renderer.render_inline(doc["truth_callout"])}'
+            f"</div>"
+        )
+
+    layer_label = "Architecture Decision Record" if doc["layer"] == "adr" else "Specification"
+    src_url = f'{GITHUB_REPO_URL}/blob/main/{doc["path"]}'
+
+    article_html = f"""
+      <article class="prose">
+        <div class="doc-meta-bar">
+          <a href="{rel_root}grafo/" style="text-decoration:none;">← Grafo</a>
+          <span>·</span>
+          <span>{html.escape(doc["id"])}</span>
+          <span>·</span>
+          <span>{layer_label}</span>
+          <span>·</span>
+          <a href="{html.escape(src_url, quote=True)}" target="_blank" rel="noopener noreferrer">Fonte Markdown</a>
+        </div>
+        <h1>{html.escape(doc["title"])}</h1>
+        {truth_html}
+        <div class="doc-Passport" aria-label="Metadados e conexões do documento">
+          <div class="passport-grid">
+            {"".join(passport_cells)}
+          </div>
+        </div>
+        {body_html}
+      </article>
+"""
+
+    if len(toc) >= 2:
+        sidebar = render_toc_sidebar(toc, "Seções")
+        return f'<div class="container doc-shell">{sidebar}{article_html}</div>', toc
+    return f'<div class="doc-shell-single">{article_html}</div>', toc
+
+
+def extract_standard_search_entries(standard_md: str) -> list[dict[str, str]]:
+    cleaned = strip_comments_outside_fences(standard_md)
+    lines = cleaned.splitlines()
+    entries: list[dict[str, str]] = []
+    used_ids: set[str] = set()
+    cur_title = "CASA Standard"
+    cur_id = ""
+    cur_buf: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+
+    def flush() -> None:
+        if not cur_buf:
+            return
+        snippet = plain_text_from_md("\n".join(cur_buf), max_len=200)
+        if snippet:
+            url = f"standard/#{cur_id}" if cur_id else "standard/"
+            entries.append(
+                {
+                    "kind": "Standard",
+                    "title": cur_title,
+                    "url": url,
+                    "body": snippet,
+                }
+            )
+        cur_buf.clear()
+
+    for line in lines:
+        if not in_fence:
+            m_f = FENCE_OPEN_RE.match(line)
+            if m_f and not line.lstrip().startswith("\u200b"):
+                in_fence = True
+                fence_char = m_f.group(2)[0]
+                fence_len = len(m_f.group(2))
+                continue
+            m_h = HEADING_RE.match(line)
+            if m_h:
+                lvl = len(m_h.group(1))
+                raw_t = m_h.group(2).strip()
+                if lvl in (2, 3):
+                    flush()
+                    cur_id = standard_heading_id(raw_t, used_ids)
+                    cur_title = re.sub(r"`([^`]+)`", r"\1", raw_t)
+                    continue
+                if lvl == 1:
+                    cur_title = raw_t
+                    continue
+            cur_buf.append(line)
+        else:
+            stripped = line.strip()
+            if (
+                not line.lstrip().startswith("\u200b")
+                and stripped
+                and all(ch == fence_char for ch in stripped)
+                and len(stripped) >= fence_len
+            ):
+                in_fence = False
+    flush()
+    return entries
+
+
+def build_site(root: Path, out_dir: Path, base_url: str) -> int:
+    standard_path = root / "STANDARD.md"
+    readme_path = root / "README.md"
+    changelog_path = root / "CHANGELOG.md"
+    site_assets_dir = root / "site"
+
+    for required in (
+        standard_path,
+        readme_path,
+        changelog_path,
+        root / "docs" / "index.json",
+        site_assets_dir / "style.css",
+        site_assets_dir / "app.js",
+        site_assets_dir / "favicon.svg",
+    ):
+        if not required.exists():
+            print(f"ERRO: fonte obrigatória ausente: {required}", file=sys.stderr)
+            return 1
+
+    standard_md = standard_path.read_text(encoding="utf-8")
+    readme_md = readme_path.read_text(encoding="utf-8")
+    changelog_md = changelog_path.read_text(encoding="utf-8")
+
+    meta = parse_standard_metadata(standard_md)
+    casa_version = meta["version"]
+    pillars = parse_readme_pillars(readme_md)
+    docs = load_canonical_docs(root)
+    skills = load_skills(root)
+
+    by_id = {d["id"]: d for d in docs}
+    doc_urls = {d["id"]: d["url"] for d in docs}
+
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    assets_out = out_dir / "assets"
+    assets_out.mkdir(parents=True, exist_ok=True)
+
+    for asset_name in ("style.css", "app.js", "favicon.svg"):
+        shutil.copyfile(site_assets_dir / asset_name, assets_out / asset_name)
+
+    (out_dir / ".nojekyll").write_text("", encoding="utf-8", newline="\n")
+
+    def write_html(rel_file: str, content: str) -> None:
+        target = out_dir / rel_file
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8", newline="\n")
+
+    # 1. Home page (index.html)
+    home_main = build_home_page(
+        meta=meta,
+        pillars=pillars,
+        docs=docs,
+        skills=skills,
+        doc_urls=doc_urls,
+    )
+    write_html(
+        "index.html",
+        render_shell(
+            title=f"CASA Standard v{casa_version} — Contexto, ADRs, Specs, Automação",
+            description=(
+                "Padrão aberto de workflow de desenvolvimento orientado a agentes de IA: "
+                "contexto em camadas, ADRs imutáveis, Specs com DoD executável e validação determinística."
+            ),
+            rel_root="./",
+            page_url="",
+            base_url=base_url,
+            casa_version=casa_version,
+            total_docs=len(docs),
+            total_skills=len(skills),
+            active_nav="home",
+            main_html=home_main,
+        ),
+    )
+
+    # 2. STANDARD.md page (standard/index.html)
+    std_renderer = MarkdownRenderer(doc_urls, "../", "standard")
+    std_body_html, std_toc = std_renderer.render(standard_md, standard_ids=True)
+    std_main = (
+        f'<div class="container doc-shell">'
+        f'{render_toc_sidebar(std_toc, "Sumário do Standard")}'
+        f'<article class="prose">'
+        f'<div class="doc-meta-bar">'
+        f"<span>Documento normativo canônico</span>"
+        f"<span>·</span>"
+        f'<span>Versão {html.escape(casa_version)}</span>'
+        f"<span>·</span>"
+        f'<a href="{GITHUB_REPO_URL}/blob/main/STANDARD.md" target="_blank" rel="noopener noreferrer">STANDARD.md no GitHub</a>'
+        f"</div>"
+        f"{std_body_html}"
+        f"</article>"
+        f"</div>"
+    )
+    write_html(
+        "standard/index.html",
+        render_shell(
+            title=f"STANDARD.md (v{casa_version}) — CASA Standard",
+            description=(
+                f"Especificação normativa completa do CASA Standard v{casa_version}: "
+                "princípios, estrutura de repositório, camadas de contexto, ADRs, Specs e docs-check."
+            ),
+            rel_root="../",
+            page_url="standard/",
+            base_url=base_url,
+            casa_version=casa_version,
+            total_docs=len(docs),
+            total_skills=len(skills),
+            active_nav="standard",
+            main_html=std_main,
+        ),
+    )
+
+    # 3. Graph Explorer (grafo/index.html)
+    svg_html = build_causal_svg(docs, "../")
+    statuses_present = sorted({d["status"] for d in docs})
+    status_filter_btns = [
+        '<button type="button" class="filter-chip" data-filter-status="all" aria-pressed="true">todos</button>'
+    ] + [
+        f'<button type="button" class="filter-chip" data-filter-status="{html.escape(st, quote=True)}" aria-pressed="false">{html.escape(st)}</button>'
+        for st in statuses_present
+    ]
+
+    ledger_rows: list[str] = []
+    for d in docs:
+        up_chips = " ".join(
+            f'<a class="doc-ref-chip" href="../{html.escape(by_id[p]["url"], quote=True)}">{html.escape(p)}</a>'
+            for p in d["builds_on"]
+            if p in by_id
+        ) or '<span style="color:var(--ink-muted);">—</span>'
+        down_chips = " ".join(
+            f'<a class="doc-ref-chip" href="../{html.escape(by_id[c]["url"], quote=True)}">{html.escape(c)}</a>'
+            for c in d["cited_by"]
+            if c in by_id
+        ) or '<span style="color:var(--ink-muted);">—</span>'
+        search_hay = f'{d["id"]} {d["title"]} {d["status"]} {" ".join(d["builds_on"])} {" ".join(d["cited_by"])}'.lower()
+        ledger_rows.append(
+            f'<tr data-doc-id="{html.escape(d["id"], quote=True)}" '
+            f'data-layer="{html.escape(d["layer"], quote=True)}" '
+            f'data-status="{html.escape(d["status"], quote=True)}" '
+            f'data-search="{html.escape(search_hay, quote=True)}">'
+            f'<td><a class="doc-ref-chip" href="../{html.escape(d["url"], quote=True)}">{html.escape(d["id"])}</a></td>'
+            f'<td><a href="../{html.escape(d["url"], quote=True)}">{html.escape(d["title"])}</a></td>'
+            f'<td>{status_badge(d["status"])}</td>'
+            f"<td>{up_chips}</td>"
+            f"<td>{down_chips}</td>"
+            f"</tr>"
+        )
+
+    grafo_main = f"""
+    <div class="container graph-page">
+      <div class="prose prose-wide">
+        <div class="doc-meta-bar">
+          <span>docs/index.json</span>
+          <span>·</span>
+          <span id="graph-visible-count">{len(docs)} documento(s)</span>
+        </div>
+        <h1>Grafo causal de ADRs e Specs</h1>
+        <p style="max-width:68ch;">
+          Passe o cursor sobre qualquer nó para iluminar sua linhagem direta (<code>builds-on</code> e
+          <code>superseded-by</code>) ou clique para abrir o documento completo com suas conexões reversas.
+        </p>
+      </div>
+
+      <div class="graph-canvas-wrap">
+        <div class="graph-legend">
+          <span>Esquerda → Direita: decisões fundacionais (ADR) até contratos derivados (Spec)</span>
+          <span>Linha tracejada: supersessão de ADR</span>
+        </div>
+        {svg_html}
+      </div>
+
+      <div class="filter-bar" role="region" aria-label="Filtros da tabela de documentos">
+        <div class="filter-group" aria-label="Filtrar por camada">
+          <button type="button" class="filter-chip" data-filter-layer="all" aria-pressed="true">Todas ({len(docs)})</button>
+          <button type="button" class="filter-chip" data-filter-layer="adr" aria-pressed="false">ADRs ({sum(1 for d in docs if d["layer"] == "adr")})</button>
+          <button type="button" class="filter-chip" data-filter-layer="specs" aria-pressed="false">Specs ({sum(1 for d in docs if d["layer"] == "specs")})</button>
+        </div>
+        <div class="filter-group" aria-label="Filtrar por status">
+          {"".join(status_filter_btns)}
+        </div>
+        <input type="search" class="filter-input" id="graph-filter-input" placeholder="Filtrar por ID, título ou relação…" aria-label="Filtrar documentos por texto">
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Título</th>
+              <th>Status</th>
+              <th>Fundamentado em</th>
+              <th>Citado por</th>
+            </tr>
+          </thead>
+          <tbody id="graph-ledger-body">
+            {"".join(ledger_rows)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" id="graph-empty-state" hidden>
+        <p>Nenhum ADR ou Spec corresponde aos filtros selecionados.</p>
+        <button type="button" class="btn btn-secondary" id="graph-reset-btn">Limpar filtros</button>
+      </div>
+    </div>
+"""
+    write_html(
+        "grafo/index.html",
+        render_shell(
+            title="Grafo de ADRs e Specs — CASA Standard",
+            description="Explorador interativo do grafo causal de decisões arquiteturais (ADRs) e especificações (Specs) do CASA Standard.",
+            rel_root="../",
+            page_url="grafo/",
+            base_url=base_url,
+            casa_version=casa_version,
+            total_docs=len(docs),
+            total_skills=len(skills),
+            active_nav="grafo",
+            main_html=grafo_main,
+        ),
+    )
+
+    # 4. Individual ADR & Spec pages
+    for d in docs:
+        doc_main, _ = build_doc_page(d, by_id, doc_urls)
+        write_html(
+            f'{d["url"]}index.html',
+            render_shell(
+                title=f'{d["id"]} · {d["title"]} — CASA Standard',
+                description=f'{d["id"]} ({d["status"]}): {d["title"]}',
+                rel_root="../../",
+                page_url=d["url"],
+                base_url=base_url,
+                casa_version=casa_version,
+                total_docs=len(docs),
+                total_skills=len(skills),
+                active_nav="grafo",
+                main_html=doc_main,
+            ),
+        )
+
+    # 5. Skills catalog (skills/index.html)
+    total_desc_chars = sum(sk["desc_chars"] for sk in skills)
+    skills_toc: list[dict[str, Any]] = []
+    skill_cards: list[str] = []
+    for idx, sk in enumerate(skills):
+        sk_id = sk["name"]
+        skills_toc.append({"id": sk_id, "level": 2, "label": f'0{idx + 1}. {sk["name"]}'})
+        sk_renderer = MarkdownRenderer(doc_urls, "../", sk_id)
+        sk_body_html, _ = sk_renderer.render(
+            sk["body"], skip_first_h1=True, heading_offset=1
+        )
+        src_href = f'{GITHUB_REPO_URL}/blob/main/{sk["path"]}'
+        skill_cards.append(
+            f'<section class="skill-section" id="{html.escape(sk_id, quote=True)}">'
+            f'<div class="skill-section-head">'
+            f'<h2 style="margin:0;border:none;padding:0;">'
+            f'<span style="font-family:var(--font-mono);font-size:0.85rem;color:var(--accent);margin-right:0.5rem;">0{idx + 1}</span>'
+            f'{html.escape(sk["name"])} <span style="color:var(--ink-muted);font-weight:400;">— {html.escape(sk["title"])}</span>'
+            f"</h2>"
+            f'<span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--ink-muted);">'
+            f'{sk["desc_chars"]} chars · <a href="{html.escape(src_href, quote=True)}" target="_blank" rel="noopener noreferrer">SKILL.md</a>'
+            f"</span>"
+            f"</div>"
+            f'<div class="skill-desc-box"><strong>Trigger / description:</strong> {html.escape(sk["description"])}</div>'
+            f"{sk_body_html}"
+            f"</section>"
+        )
+
+    skills_intro_renderer = MarkdownRenderer(doc_urls, "../", "skills-intro")
+    skills_intro_p = skills_intro_renderer.render_inline(
+        "Distribuídas pelo `casa-init` em repositórios T1 para `.agents/skills/` e `.claude/skills/` "
+        "(ADR-0017, SPEC-0010). Cada skill é auto-contida, aponta para o `STANDARD.md` cravado no "
+        "`casa-standard-ref` do adotante e mantém orçamento enxuto de descrições no launch."
+    )
+    skills_main = (
+        f'<div class="container doc-shell">'
+        f'{render_toc_sidebar(skills_toc, "Ciclo §9")}'
+        f'<div class="prose prose-wide">'
+        f'<div class="doc-meta-bar">'
+        f"<span>Formato Agent Skills</span>"
+        f"<span>·</span>"
+        f"<span>{len(skills)} skills</span>"
+        f"<span>·</span>"
+        f"<span>Orçamento somado de descriptions: {total_desc_chars} caracteres</span>"
+        f"</div>"
+        f"<h1>Agent Skills do ciclo de entrega</h1>"
+        f"<p style=\"max-width:68ch;\">{skills_intro_p}</p>"
+        f'{"".join(skill_cards)}'
+        f"</div>"
+        f"</div>"
+    )
+    write_html(
+        "skills/index.html",
+        render_shell(
+            title="Agent Skills (casa-*) — CASA Standard",
+            description="Catálogo completo das 5 Agent Skills oficiais do CASA Standard: casa-explore, casa-propose, casa-apply, casa-verify e casa-close.",
+            rel_root="../",
+            page_url="skills/",
+            base_url=base_url,
+            casa_version=casa_version,
+            total_docs=len(docs),
+            total_skills=len(skills),
+            active_nav="skills",
+            main_html=skills_main,
+        ),
+    )
+
+    # 6. Changelog page (changelog/index.html)
+    chg_renderer = MarkdownRenderer(doc_urls, "../", "changelog")
+    chg_body_html, chg_toc = chg_renderer.render(changelog_md, skip_first_h1=True)
+    chg_main = (
+        f'<div class="container doc-shell">'
+        f'{render_toc_sidebar(chg_toc, "Versões")}'
+        f'<article class="prose">'
+        f'<div class="doc-meta-bar">'
+        f"<span>Histórico de contrato</span>"
+        f"<span>·</span>"
+        f'<a href="{GITHUB_REPO_URL}/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">CHANGELOG.md no GitHub</a>'
+        f"</div>"
+        f"<h1>Changelog do contrato CASA</h1>"
+        f"{chg_body_html}"
+        f"</article>"
+        f"</div>"
+    )
+    write_html(
+        "changelog/index.html",
+        render_shell(
+            title="Changelog — CASA Standard",
+            description="Histórico completo de versões e evolução do contrato normativo do CASA Standard.",
+            rel_root="../",
+            page_url="changelog/",
+            base_url=base_url,
+            casa_version=casa_version,
+            total_docs=len(docs),
+            total_skills=len(skills),
+            active_nav="changelog",
+            main_html=chg_main,
+        ),
+    )
+
+    # 7. Search index (assets/search-index.json)
+    search_entries: list[dict[str, str]] = []
+    search_entries.extend(extract_standard_search_entries(standard_md))
+    for d in docs:
+        search_entries.append(
+            {
+                "kind": d["id"],
+                "title": f'{d["id"]} · {d["title"]}',
+                "url": d["url"],
+                "body": f'[{d["status"]}] ' + plain_text_from_md(d["body"], max_len=190),
+            }
+        )
+    for sk in skills:
+        search_entries.append(
+            {
+                "kind": "Skill",
+                "title": f'{sk["name"]} — {sk["title"]}',
+                "url": f'skills/#{sk["name"]}',
+                "body": sk["description"],
+            }
+        )
+    for item in chg_toc:
+        if item["level"] == 2:
+            search_entries.append(
+                {
+                    "kind": "Changelog",
+                    "title": item["label"],
+                    "url": f'changelog/#{item["id"]}',
+                    "body": f'Notas de versão e migração de {item["label"]}.',
+                }
+            )
+
+    (assets_out / "search-index.json").write_text(
+        json.dumps(search_entries, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    total_pages = 5 + len(docs)
+    print(
+        f"Site gerado em {out_dir}: {total_pages} páginas HTML "
+        f"(CASA v{casa_version}, {len(docs)} docs, {len(skills)} skills)."
+    )
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Compila o site estático do CASA Standard a partir das fontes canônicas."
+    )
+    parser.add_argument(
+        "--root",
+        default=str(Path(__file__).resolve().parent.parent),
+        help="Raiz do repositório casa-standard (default: pai de scripts/).",
+    )
+    parser.add_argument(
+        "--out",
+        default="_site",
+        help="Diretório de saída do site gerado (default: _site relativo ao CWD ou absoluto).",
+    )
+    parser.add_argument(
+        "--base-url",
+        default="https://atplus-digital.github.io/casa-standard/",
+        help="URL pública canônica para tags OpenGraph e canonical.",
+    )
+    args = parser.parse_args()
+    root = Path(args.root).resolve()
+    out_dir = Path(args.out)
+    if not out_dir.is_absolute():
+        out_dir = (Path.cwd() / out_dir).resolve()
+    return build_site(root, out_dir, args.base_url)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

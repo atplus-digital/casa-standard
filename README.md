@@ -15,6 +15,7 @@ Critério de design: **complexidade sustentada por automação é barata; comple
 
 ## Conteúdo deste repo
 
+- **[Site oficial (GitHub Pages)](https://atplus-digital.github.io/casa-standard/)** — leitura editorial do `STANDARD.md`, quickstart copiável, grafo interativo de ADRs/Specs, catálogo de skills e changelog, compilado direto das fontes abaixo (ADR-0018).
 - **[STANDARD.md](STANDARD.md)** — o documento normativo. É a fonte da verdade.
 - **[CHANGELOG.md](CHANGELOG.md)** — versões do contrato CASA.
 - **[docs/templates/](docs/templates/)** — templates oficiais de `AGENTS.md`, ADR e Spec, e as skills do ciclo de entrega (`skills/casa-*`, ADR-0017).

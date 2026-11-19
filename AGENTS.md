@@ -27,6 +27,7 @@ scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
 scripts/test-docs-reserve           # exit 0; cenários da reserva (SPEC-0007)
 scripts/test-update-check           # exit 0; cenários do update-check (SPEC-0008)
 scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
+scripts/test-site                   # exit 0; cenários do gerador do site (SPEC-0011)
 ```
 
 ## Git & PRs
@@ -61,6 +62,9 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Script novo em `scripts/` precisa do bit de execução NO ÍNDICE do git:
   `git update-index --chmod=+x scripts/<nome>`. No Windows `core.filemode=false` —
   `chmod` do filesystem não chega ao índice, e o CI invoca sem `bash` (exit 126).
+- `scripts/build-site` e `site/` são exclusivos deste repo (nunca entram em `TOOLCHAIN` do
+  `casa-init`); links internos do HTML gerado devem ser relativos ao nível da página, pois
+  `/assets/…` quebra sob o subpath `/casa-standard/` do GitHub Pages (ADR-0018).
 
 ## Mapa de contexto
 
@@ -78,4 +82,5 @@ comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não
 - Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título"` (ADR-0013)
 - Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
 - Skills do ciclo distribuídas ao adotante: `docs/templates/skills/casa-*` (ADR-0017, SPEC-0010)
+- Site público (GitHub Pages): `scripts/build-site` → `_site/` (ADR-0018, SPEC-0011)
 - Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`

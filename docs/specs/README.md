@@ -14,3 +14,4 @@
 | [SPEC-0008](0008-casa-update-check.md) | casa-update-check mantém no tracker o aviso de contrato CASA desatualizado | implemented |
 | [SPEC-0009](0009-gate-confiavel-hook-ci-e-imutabilidade-validam-o-que-de-fato-entra.md) | Gate confiável: hook, CI e imutabilidade validam o que de fato entra | implemented |
 | [SPEC-0010](0010-casa-init-distribui-as-skills-casa-do-ciclo-de-entrega.md) | casa-init distribui as skills casa-* do ciclo de entrega | implemented |
+| [SPEC-0011](0011-build-site-gera-o-site-estatico-do-casa-standard-para-o-github-pages.md) | build-site gera o site estático do CASA Standard para o GitHub Pages | implemented |

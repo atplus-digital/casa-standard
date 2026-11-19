@@ -42,3 +42,5 @@ jobs:
         run: scripts/test-update-check
       - name: Testar instalador curl|sh (SPEC-0002)
         run: scripts/test-install
+      - name: Testar gerador do site (SPEC-0011)
+        run: scripts/test-site
