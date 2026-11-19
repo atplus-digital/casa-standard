@@ -1191,6 +1191,8 @@ def build_home_page(
     adr_count = sum(1 for d in docs if d["layer"] == "adr")
     spec_count = sum(1 for d in docs if d["layer"] == "specs")
     ver = html.escape(meta["version"])
+    raw_ver = meta["version"]
+    pin_tag = html.escape(f"v{raw_ver}" if raw_ver.count(".") >= 2 else f"v{raw_ver}.0")
     crit = html.escape(meta["criterion"])
 
     home_renderer = MarkdownRenderer(doc_urls, "./", f"home-{locale}", locale=locale)
@@ -1404,7 +1406,7 @@ sh install.sh . --repo-id meu-repo</code>
                 </div>
                 <p class="quickstart-caption">
                   Para pinar uma revisão imutável, passe <code>CASA_REF=&lt;tag|sha&gt;</code> ao <code>sh</code>:
-                  <code>curl -fsSL …/install.sh | CASA_REF=main sh -s -- . --repo-id meu-repo</code>.
+                  <code>curl -fsSL …/install.sh | CASA_REF={pin_tag} sh -s -- . --repo-id meu-repo</code>.
                 </p>
               </div>
 
@@ -1583,7 +1585,7 @@ sh install.sh . --repo-id my-repo</code>
                 </div>
                 <p class="quickstart-caption">
                   To pin an immutable revision, pass <code>CASA_REF=&lt;tag|sha&gt;</code> to <code>sh</code>:
-                  <code>curl -fsSL …/install.sh | CASA_REF=main sh -s -- . --repo-id my-repo</code>.
+                  <code>curl -fsSL …/install.sh | CASA_REF={pin_tag} sh -s -- . --repo-id my-repo</code>.
                 </p>
               </div>
 

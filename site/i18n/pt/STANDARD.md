@@ -2,7 +2,7 @@
 
 **Versão CASA:** 1.11 · **Status:** accepted (2026-11-19) · **Mantenedor:** atplus-digital/maicon
 
-Padrão de workflow de desenvolvimento para todos os projetos da empresa, desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
+Padrão de workflow de engenharia desenhado para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) operam como executores de primeira classe ao lado de humanos. Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo aqui é validado por ferramenta ou custa quase nada. O que dependeria de disciplina sem validação está no Apêndice A — entra quando o sintoma aparecer.
 
 **Regra de promoção (cumprida em 2026-06-09):** o padrão só seria promovido depois que um repo-piloto passasse verde no `docs-check` — o console-platon passou (66 docs migrados, 0 erros) e o próprio `casa-standard` passou a operar sob o padrão. O princípio permanece para toda mudança futura: um padrão desmentido pela própria referência ensina o agente a desconfiar de todas as suas garantias.
 
@@ -47,7 +47,7 @@ scripts/
 Cada repo declara seu nível no `AGENTS.md`:
 
 - **T0 — leve** (script, POC, ferramenta descartável): só `AGENTS.md` + DoD mínimo (build/teste verde).
-- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` em **gate automatizado** — CI quando o remote é de host com adaptador (hoje: GitHub); pre-commit hook nos demais casos — sem remote ou host sem adaptador, com aviso para integrar o `docs-check` ao CI do host (referência: `scripts/pre-commit`; decisão: ADR-0006 do `casa-standard`). Gate documental ("está no DoD do router") não conta: é disciplina, não automação
+- **T1 — padrão** (todo o resto): tudo deste documento, com `docs-check` em **gate automatizado** — CI quando o remote é de host com adaptador (hoje: GitHub); pre-commit hook nos demais casos — sem remote ou host sem adaptador, com aviso para integrar o `docs-check` ao CI do host (referência: `scripts/pre-commit`; decisão: ADR-0006 do `casa-standard`). Gate documental ("está no DoD do router") não conta: é disciplina, não automação.
 
 Dentro de T1, o que escrever é decidido por **gatilho**:
 
