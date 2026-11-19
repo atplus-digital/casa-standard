@@ -1,15 +1,13 @@
 # Changelog
 
-## Próxima versão — pendente (ADR-0017 em `proposed`)
-
-Ao aceitar o ADR-0017, o commit de fechamento troca este título por `## CASA 1.10 — <data>`
-e sobe a versão de contrato (o `casa-update-check` só lê títulos `## CASA x.y`).
+## CASA 1.10 — 2026-11-18
 
 - O `casa-init` instala, em repo T1, as skills `casa-explore`, `casa-propose`,
   `casa-apply`, `casa-verify` e `casa-close` em `.agents/skills/` e `.claude/skills/`
-  (formato aberto Agent Skills): o ciclo do §9 vira procedimento que o agente executa. O
-  `casa-verify` audita caso de borda × teste ("em que situação este teste passaria com a
-  entrega quebrada?") — assistivo, nunca gate.
+  (formato aberto Agent Skills; ADR-0017, SPEC-0010): o ciclo do §9 vira procedimento que o
+  agente executa, com links cravados no `casa-standard-ref` do adotante. O `casa-verify`
+  audita caso de borda × teste ("em que situação este teste passaria com a entrega
+  quebrada?") — assistivo, nunca gate. Mudança compatível.
 
 ## CASA 1.9 — 2026-11-18
 

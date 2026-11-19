@@ -36,7 +36,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.9"
+CASA_VERSION = "1.10"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
@@ -58,6 +58,7 @@ HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
 # entre clientes (.agents/skills) + a do host que não a lê (Claude Code). Novo = ADR.
 SKILLS = ["casa-explore", "casa-propose", "casa-apply", "casa-verify", "casa-close"]
 SKILL_DIRS = [".agents/skills", ".claude/skills"]
+SKILL_MARKER = "\n# CASA · "  # cabeçalho presente nas skills casa-* de toda versão
 # Skill casa-* renomeada ou retirada numa versão futura: listada aqui, sai do adotante.
 RETIRED_SKILLS = []
 # Workflows instalados quando o remote é GitHub (ADR-0006): gate + update-check (ADR-0016).
@@ -166,12 +167,53 @@ def upsert_router_meta(text, ref):
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), changed
 
 
+def _is_casa_skill(path):
+    try:
+        return SKILL_MARKER in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def router_tier(text, fallback):
+    """Lê casa-tier do bloco yaml do router (sem comentário HTML, aceitando aspas e comentário
+    inline como o docs-check); sem declaração no router existente, usa --tier."""
+    visible = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    yb = re.search(r"```yaml\s*\n(.*?)\n```", visible, flags=re.I | re.S)
+    if yb:
+        m = re.search(r"^casa-tier:\s*(.*)$", yb.group(1), flags=re.M)
+        if m:
+            val = re.split(r"\s+#", m.group(1).strip(), maxsplit=1)[0].strip().strip("'\"")
+            if val:
+                return val
+    return fallback
+
+
 def render_skill(data, ref):
     """O link do template aponta para o STANDARD em `main`; o adotante recebe o STANDARD do
     snapshot da toolchain instalada (casa-standard-ref) — o que as skills descrevem."""
+    data = data.replace(b"\r\n", b"\n")  # clone Windows com core.autocrlf=true → LF
     if re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]*", ref or "") and ref not in ("unknown", "local"):
         return data.replace(b"/casa-standard/blob/main/", f"/casa-standard/blob/{ref}/".encode())
     return data
+
+
+def remove_casa_skills(target):
+    removed = 0
+    for base in SKILL_DIRS:
+        try:
+            for name in (*SKILLS, *RETIRED_SKILLS):
+                old = target / base / name / "SKILL.md"
+                if old.is_file() and _is_casa_skill(old):
+                    shutil.rmtree(old.parent)
+                    removed += 1
+            skills_dir = target / base
+            if skills_dir.is_dir() and not any(skills_dir.iterdir()):
+                skills_dir.rmdir()
+                if skills_dir.parent.is_dir() and not any(skills_dir.parent.iterdir()):
+                    skills_dir.parent.rmdir()
+        except OSError:
+            continue
+    return removed
 
 
 def install_skills(target, ref):
@@ -180,13 +222,15 @@ def install_skills(target, ref):
         try:
             for name in RETIRED_SKILLS:  # skill casa-* aposentada: sai, se for mesmo nossa
                 old = target / base / name / "SKILL.md"
-                if old.is_file() and f"name: {name}\n" in old.read_text(encoding="utf-8"):
+                if old.is_file() and _is_casa_skill(old):
                     shutil.rmtree(old.parent)
                     count["removido"] += 1
             for name in SKILLS:
                 data = render_skill((SRC / "docs/templates/skills" / name / "SKILL.md").read_bytes(), ref)
                 dest = target / base / name / "SKILL.md"
                 dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.is_symlink() and not dest.exists():
+                    dest.unlink()
                 if not dest.exists():
                     count["criado"] += 1
                 elif dest.read_bytes() != data:
@@ -336,9 +380,11 @@ def main():
                      f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
 
     # 2c. Skills do ciclo (ADR-0017) — só em T1: T0 não tem ADR/Spec para o ciclo operar.
-    tier = re.search(r"^casa-tier:\s*(T\d)", router.read_text(encoding="utf-8"), re.M)
-    if tier and tier.group(1) == "T0":
-        say("ignorado", "skills do ciclo (casa-*): repo T0 não usa ADR/Spec (ADR-0017)")
+    if router_tier(router.read_text(encoding="utf-8", errors="replace"), args.tier) == "T0":
+        if remove_casa_skills(target):
+            say("removido", "skills do ciclo (casa-*): repo mudou para T0 (ADR-0017)")
+        else:
+            say("ignorado", "skills do ciclo (casa-*): repo T0 não usa ADR/Spec (ADR-0017)")
     else:
         install_skills(target, ref)
 

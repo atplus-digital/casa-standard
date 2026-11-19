@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-18
 builds-on: [ADR-0004, ADR-0009, ADR-0010, ADR-0012]
 superseded-by: null
@@ -85,13 +85,14 @@ nunca é tocada — quem quer customizar cria a sua com outro nome.
 Cada skill aponta o §N do `STANDARD.md` por link no **snapshot da toolchain instalada**: o
 template usa `blob/main/` e o `casa-init` carimba o `casa-standard-ref` do adotante — o
 `STANDARD.md` não é copiado para o repo. Skill retirada ou renomeada entra numa lista de
-aposentadas que o `casa-init` remove do adotante (só se for nossa). Diretório de skill que
+aposentadas que o `casa-init` remove do adotante (só se tiver marcador CASA, preservando
+homônima alheia; em repo T0, skills `casa-*` anteriores também saem). Diretório de skill que
 não dá para escrever (ex.: `.claude` é arquivo) ou que está no `.gitignore` vira AVISO, sem
 derrubar o resto da instalação.
 
 O `docs-check` não valida skills (não são gate). As skills entram no §2/§9 do STANDARD, o
-que é mudança **compatível** de contrato: a aceitação sobe a versão menor (ADR-0010), para o
-`casa-update-check` avisar os adotantes.
+que é mudança **compatível** de contrato: a aceitação sobe a versão menor (CASA 1.10;
+ADR-0010), para o `casa-update-check` avisar os adotantes.
 
 ## Consequências
 
@@ -102,9 +103,13 @@ que é mudança **compatível** de contrato: a aceitação sobe a versão menor 
 - O adotante passa a ter `.agents/skills/casa-*` e `.claude/skills/casa-*`, idênticos e
   gerados; cliente que lê os dois diretórios vê o mesmo nome duas vezes, com o mesmo
   conteúdo.
+- O próprio `casa-standard` (`casa-standard-ref: self`, onde o `casa-init` não opera) mantém
+  apenas a fonte única em `docs/templates/skills/`, sem duplicar cópias em `.agents/` e
+  `.claude/`.
 - Texto de skill pode envelhecer em relação ao STANDARD: os testes conferem formato, a
   identidade das duas cópias, que todo `scripts/…` citado existe na toolchain e que toda
-  seção `§N` citada existe no STANDARD. Que a skill não traga regra própria é revisão humana.
+  seção `§N` / `§N.M` citada existe no STANDARD. Que a skill não traga regra própria é
+  revisão humana.
 - Fica para decisão própria: `docs-check --json` (saída estruturada para o `casa-verify`) e
   o modelo de spec viva com deltas do OpenSpec (piloto).
 

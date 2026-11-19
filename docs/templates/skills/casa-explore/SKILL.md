@@ -1,6 +1,6 @@
 ---
 name: casa-explore
-description: Mapeia o contexto CASA antes de mexer no código — router AGENTS.md, capítulos do Mapa de contexto, ADRs e Specs da área (docs/index.json) e o código afetado — e diz se a tarefa pede ADR, Spec ou nada. Use ao começar uma tarefa, investigar um problema ou antes de propor mudança num repo que segue o CASA Standard.
+description: Mapeia o contexto CASA antes de mexer no código — router AGENTS.md, capítulos do Mapa de contexto, ADRs e Specs da área (docs/index.json) e o código afetado — e diz se a tarefa pede ADR, Spec ou nada. Use ao começar uma tarefa não-trivial, investigar um problema ou antes de propor mudança num repo que segue o CASA Standard.
 ---
 
 # CASA · explorar

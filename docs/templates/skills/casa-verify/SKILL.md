@@ -15,8 +15,9 @@ PR; não aprova nem reprova nada sozinho.
    quebrada?** Procure dublê no lugar do runtime, banco ou serviço real; asserção que não
    olha a consequência; só o caminho feliz. Diga onde a evidência para antes da
    consequência para o produto.
-4. Fechamento (§5.2): o gotcha novo está no `AGENTS.md`? O estado atual novo está no
-   capítulo de contexto? `implemented-by` lista só paths reais?
+4. Prontidão para o fechamento (§5.2): gotchas novos e mudanças de estado atual já estão
+   (ou estão mapeados para o `casa-close`) em `AGENTS.md` e `docs/context/`? Se a Spec já
+   foi fechada, `implemented-by` lista só paths reais?
 5. Relatório, um item por caso: ✅ coberto · ⚠️ fraco (por quê) · ❌ sem cobertura — cada
    ⚠️/❌ com o teste ou a linha de DoD concreta que resolveria.
 

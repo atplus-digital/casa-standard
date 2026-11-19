@@ -20,5 +20,6 @@ Tudo no **mesmo commit**:
    atemporal, apontando para o ADR em vez de copiá-lo.
 4. `python3 scripts/docs-check --emit-index` e depois `python3 scripts/docs-check` → 0 erro.
 
-Parte do escopo não ficou pronta? Não feche como `implemented`: divida a Spec ou mova o
-resto para `## Fora do escopo` mais backlog (casa-standard:ADR-0012).
+Parte do escopo não ficou pronta? Não feche como `implemented`: com acordo humano, divida
+a Spec (a original vira `deprecated`) ou mova o resto para `## Fora do escopo` mais
+tracker/backlog (casa-standard:ADR-0012).

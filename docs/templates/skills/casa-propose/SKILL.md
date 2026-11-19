@@ -24,8 +24,9 @@ Etapas 1–3 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/ca
 5. **DoD (§7):** comandos REAIS do repo, com critério binário no comentário; todo caso de
    borda coberto por uma linha ou por um teste que ela roda (`# casos 1–4`). DoD só com os
    comandos genéricos do router é spec sem fechamento próprio.
-6. Rode `python3 scripts/docs-check` até verde. Pare aqui: aceitar (`proposed → accepted`,
-   `draft → accepted`) é decisão humana, no PR.
+6. Rode `python3 scripts/docs-check --emit-index` e depois `python3 scripts/docs-check`
+   até verde. Pare aqui: aceitar (`proposed → accepted`, `draft → accepted`) é decisão
+   humana, no PR.
 
 Entrega grande demais para um fechamento só? Divida em specs ou mova parte para
 `## Fora do escopo` (casa-standard:ADR-0012).

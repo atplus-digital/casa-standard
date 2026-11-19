@@ -188,7 +188,7 @@
     "path": "docs/adr/0017-ciclo-de-entrega-como-agent-skills.md",
     "layer": "adr",
     "title": "Ciclo de entrega como Agent Skills: o agente executa o §9; verificação por agente é assistiva, nunca gate",
-    "status": "proposed",
+    "status": "accepted",
     "builds-on": [
       "ADR-0004",
       "ADR-0009",
@@ -381,13 +381,21 @@
     "path": "docs/specs/0010-casa-init-distribui-as-skills-casa-do-ciclo-de-entrega.md",
     "layer": "specs",
     "title": "casa-init distribui as skills casa-* do ciclo de entrega",
-    "status": "draft",
+    "status": "implemented",
     "builds-on": [
       "ADR-0017",
       "ADR-0004",
       "ADR-0009"
     ],
     "superseded-by": null,
-    "implemented-by": []
+    "implemented-by": [
+      "scripts/casa-init",
+      "scripts/test-casa-init",
+      "docs/templates/skills/casa-explore/SKILL.md",
+      "docs/templates/skills/casa-propose/SKILL.md",
+      "docs/templates/skills/casa-apply/SKILL.md",
+      "docs/templates/skills/casa-verify/SKILL.md",
+      "docs/templates/skills/casa-close/SKILL.md"
+    ]
   }
 ]
