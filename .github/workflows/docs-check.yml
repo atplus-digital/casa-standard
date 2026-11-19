@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  merge_group:   # fila de merge: o check obrigatório também precisa rodar aqui
+  merge_group:   # merge queue: required status checks must also trigger here
 
 permissions:
   contents: read
@@ -21,26 +21,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validar docs (CASA Standard §8)
+      - name: Validate docs (CASA Standard §8)
         env:
-          # PR: branch de destino; fila de merge: base do grupo; push: commit anterior ao push.
+          # PR: target branch; merge queue: group base; push: previous commit before push.
           BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
         run: |
           if git rev-parse -q --verify "${BASE}^{commit}" >/dev/null; then
             python3 scripts/docs-check --check-adr-immutability --base-ref "$BASE"
           else
-            echo "::warning::sem base comparável ('${BASE}': primeiro push ou force-push) — imutabilidade de ADR NÃO verificada neste evento"
+            echo "::warning::no comparable base ('${BASE}': initial push or force-push) — ADR immutability NOT verified on this event"
             python3 scripts/docs-check
           fi
-      - name: Testar validador docs-check (SPEC-0003)
+      - name: Test docs-check validator (SPEC-0003..0009, 0012)
         run: bash scripts/test-docs-check
-      - name: Testar bootstrap casa-init (SPEC-0001)
+      - name: Test casa-init bootstrap (SPEC-0001, 0009, 0010)
         run: scripts/test-casa-init
-      - name: Testar reserva docs-reserve (SPEC-0007)
+      - name: Test docs-reserve ledger (SPEC-0007, 0012)
         run: scripts/test-docs-reserve
-      - name: Testar update-check (SPEC-0008)
+      - name: Test casa-update-check (SPEC-0008)
         run: scripts/test-update-check
-      - name: Testar instalador curl|sh (SPEC-0002)
+      - name: Test curl|sh installer (SPEC-0002)
         run: scripts/test-install
-      - name: Testar gerador do site (SPEC-0011)
+      - name: Test bilingual site builder & i18n parity (SPEC-0011, 0012)
         run: scripts/test-site

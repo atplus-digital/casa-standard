@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0011 (build-site: compilador estático do site do CASA Standard). DoD: exit 0.
+# Scenarios for SPEC-0011 + SPEC-0012 (build-site: bilingual EN/PT-BR static site compiler & parity gates). DoD: exit 0.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/scripts/build-site"
@@ -20,58 +20,96 @@ ck() {
     fi
 }
 
-# ── SPEC-0011/1: Geração completa de rotas, docs de index.json, search-index e .nojekyll ──
+# ── SPEC-0011/1 + SPEC-0012/6: Full EN (/), PT-BR (/pt/), /grafo/ redirect, search indices, and .nojekyll ──
 OUT1="$TMP/site1"
 python3 "$BUILD" --root "$ROOT" --out "$OUT1" >/dev/null 2>&1; RC1=$?
-ck "SPEC-0011/1: build-site termina com exit 0" '[ "$RC1" -eq 0 ]'
-ck "SPEC-0011/1b: rotas principais, assets e .nojekyll existem" '
+ck "SPEC-0011/1 + SPEC-0012/6: build-site exits 0" '[ "$RC1" -eq 0 ]'
+ck "SPEC-0012/6: EN routes, PT-BR routes, /grafo/ redirect, assets, and per-locale search indices exist" '
     [ -f "$OUT1/index.html" ] &&
     [ -f "$OUT1/standard/index.html" ] &&
+    [ -f "$OUT1/graph/index.html" ] &&
     [ -f "$OUT1/grafo/index.html" ] &&
     [ -f "$OUT1/skills/index.html" ] &&
     [ -f "$OUT1/changelog/index.html" ] &&
+    [ -f "$OUT1/pt/index.html" ] &&
+    [ -f "$OUT1/pt/standard/index.html" ] &&
+    [ -f "$OUT1/pt/grafo/index.html" ] &&
+    [ -f "$OUT1/pt/skills/index.html" ] &&
+    [ -f "$OUT1/pt/changelog/index.html" ] &&
     [ -f "$OUT1/.nojekyll" ] &&
     [ -f "$OUT1/assets/style.css" ] &&
     [ -f "$OUT1/assets/app.js" ] &&
     [ -f "$OUT1/assets/favicon.svg" ] &&
-    [ -f "$OUT1/assets/search-index.json" ]
+    [ -f "$OUT1/assets/search-index.en.json" ] &&
+    [ -f "$OUT1/assets/search-index.pt.json" ] &&
+    grep -q "url=../graph/" "$OUT1/grafo/index.html"
 '
-ck "SPEC-0011/1c: cada item de docs/index.json gera página própria com seu H1" '
+
+ck "SPEC-0011/1c + SPEC-0012/8: every docs/index.json item renders in both EN and PT-BR with provenance notices where translated" '
 python3 - "$ROOT" "$OUT1" << "PY"
 import html, json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
 items = json.loads((root / "docs/index.json").read_text(encoding="utf-8"))
-assert len(items) > 0
+en_i18n = json.loads((root / "site/i18n/en/docs.json").read_text(encoding="utf-8"))
+pt_i18n = json.loads((root / "site/i18n/pt/docs.json").read_text(encoding="utf-8"))
+assert len(items) >= 30
+
 for item in items:
+    doc_id = item["id"]
     stem = pathlib.Path(item["path"]).stem
-    page = out / item["layer"] / stem / "index.html"
-    assert page.is_file(), f"missing {page}"
-    body = page.read_text(encoding="utf-8")
-    expected_h1 = "<h1>" + html.escape(item["title"]) + "</h1>"
-    assert expected_h1 in body, f"title mismatch in {page}"
+    en_page = out / item["layer"] / stem / "index.html"
+    pt_page = out / "pt" / item["layer"] / stem / "index.html"
+    assert en_page.is_file(), f"missing EN page {en_page}"
+    assert pt_page.is_file(), f"missing PT page {pt_page}"
+    en_body = en_page.read_text(encoding="utf-8")
+    pt_body = pt_page.read_text(encoding="utf-8")
+
+    if doc_id in en_i18n:
+        # Historical PT-BR doc translated into EN on /
+        exp_en_h1 = "<h1>" + html.escape(en_i18n[doc_id]["title"]) + "</h1>"
+        exp_pt_h1 = "<h1>" + html.escape(item["title"]) + "</h1>"
+        assert exp_en_h1 in en_body, f"EN translated H1 mismatch in {en_page}"
+        assert exp_pt_h1 in pt_body, f"PT canonical H1 mismatch in {pt_page}"
+        assert "class=\"provenance-note\"" in en_body and item["path"] in en_body, f"missing EN provenance note on {en_page}"
+        assert "class=\"provenance-note\"" not in pt_body, f"unexpected provenance note on canonical PT page {pt_page}"
+    else:
+        # Canonical EN doc translated into PT-BR on /pt/
+        assert doc_id in pt_i18n, f"{doc_id} missing from pt_i18n"
+        exp_en_h1 = "<h1>" + html.escape(item["title"]) + "</h1>"
+        exp_pt_h1 = "<h1>" + html.escape(pt_i18n[doc_id]["title"]) + "</h1>"
+        assert exp_en_h1 in en_body, f"EN canonical H1 mismatch in {en_page}"
+        assert exp_pt_h1 in pt_body, f"PT translated H1 mismatch in {pt_page}"
+        assert "class=\"provenance-note\"" not in en_body, f"unexpected provenance note on canonical EN page {en_page}"
+        assert "class=\"provenance-note\"" in pt_body and item["path"] in pt_body, f"missing PT provenance note on {pt_page}"
 PY
 '
 
-# ── SPEC-0011/3, 4, 5, 6, 7, 8: Auditoria estrutural de HTML, links relativos, SEO, auto-link e UI ──
-ck "SPEC-0011/3: links relativos, fragmentos #id e search-index resolvem dentro de _site/" '
+# ── SPEC-0011/3 + SPEC-0012/7: Relative links, #fragments, EN|PT-BR counterpart switcher, and per-locale search indices ──
+ck "SPEC-0011/3 + SPEC-0012/7: relative links, #fragments, EN|PT-BR counterpart links, and search indices resolve inside _site/" '
 python3 - "$OUT1" << "PY"
 import json, pathlib, sys
 from html.parser import HTMLParser
 
 site = pathlib.Path(sys.argv[1]).resolve()
 html_files = sorted(site.rglob("*.html"))
-assert len(html_files) >= 30
+assert len(html_files) >= 65
 
 class PageParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.ids = []
         self.refs = []
+        self.lang_en_href = None
+        self.lang_pt_href = None
     def handle_starttag(self, tag, attrs):
         d = dict(attrs)
         if "id" in d:
             self.ids.append(d["id"])
+            if d["id"] == "lang-link-en":
+                self.lang_en_href = d.get("href")
+            elif d["id"] == "lang-link-pt":
+                self.lang_pt_href = d.get("href")
         for k in ("href", "src", "data-href"):
             if k in d:
                 self.refs.append((k, d[k]))
@@ -85,6 +123,7 @@ for f in html_files:
     page_ids[f] = set(p.ids)
 
 for f, p in parsed.items():
+    assert p.lang_en_href and p.lang_pt_href, f"{f}: missing EN/PT switcher links"
     for attr, val in p.refs:
         if val.startswith(("http://", "https://", "mailto:")):
             continue
@@ -97,19 +136,42 @@ for f, p in parsed.items():
         if frag and target_file in page_ids:
             assert frag in page_ids[target_file], f"{f}: broken anchor #{frag} in {val}"
 
-sidx = json.loads((site / "assets/search-index.json").read_text(encoding="utf-8"))
-assert len(sidx) >= 30
-for item in sidx:
-    path_part, _, frag = item["url"].partition("#")
-    target = (site / path_part).resolve()
-    target_file = (target / "index.html") if target.is_dir() else target
-    assert target_file.is_file(), f"search-index broken url: {item}"
-    if frag:
-        assert frag in page_ids[target_file], f"search-index broken fragment #{frag}: {item}"
+    # Verify counterpart reciprocity (except /grafo/ redirect which maps EN->/graph/ and PT->/pt/grafo/)
+    rel = f.relative_to(site).as_posix()
+    en_target = (f.parent / p.lang_en_href).resolve()
+    pt_target = (f.parent / p.lang_pt_href).resolve()
+    en_file = (en_target / "index.html") if en_target.is_dir() else en_target
+    pt_file = (pt_target / "index.html") if pt_target.is_dir() else pt_target
+    if rel == "grafo/index.html":
+        assert en_file == site / "graph/index.html"
+        assert pt_file == site / "pt/grafo/index.html"
+    elif rel.startswith("pt/"):
+        assert pt_file == f, f"{f}: PT self-link does not point to self"
+        expected_en_rel = "graph/index.html" if rel == "pt/grafo/index.html" else rel[len("pt/"):]
+        assert en_file == site / expected_en_rel, f"{f}: EN switch {en_file} != {site / expected_en_rel}"
+    else:
+        assert en_file == f, f"{f}: EN self-link does not point to self"
+        expected_pt_rel = "pt/grafo/index.html" if rel == "graph/index.html" else f"pt/{rel}"
+        assert pt_file == site / expected_pt_rel, f"{f}: PT switch {pt_file} != {site / expected_pt_rel}"
+
+for idx_name, must_start_pt in (("search-index.en.json", False), ("search-index.pt.json", True)):
+    sidx = json.loads((site / "assets" / idx_name).read_text(encoding="utf-8"))
+    assert len(sidx) >= 30
+    for item in sidx:
+        if must_start_pt:
+            assert item["url"].startswith("pt/"), f"PT search entry escapes /pt/: {item}"
+        else:
+            assert not item["url"].startswith("pt/"), f"EN search entry points into /pt/: {item}"
+        path_part, _, frag = item["url"].partition("#")
+        target = (site / path_part).resolve()
+        target_file = (target / "index.html") if target.is_dir() else target
+        assert target_file.is_file(), f"{idx_name} broken url: {item}"
+        if frag:
+            assert frag in page_ids[target_file], f"{idx_name} broken fragment #{frag}: {item}"
 PY
 '
 
-ck "SPEC-0011/4: todas as páginas têm lang=pt-BR, <title>, meta description, 1 <h1> e IDs únicos" '
+ck "SPEC-0011/4 + SPEC-0012/6: every page has locale-matching html[lang], <title>, meta description, hreflang tags, 1 <h1>, and unique IDs" '
 python3 - "$OUT1" << "PY"
 import pathlib, sys
 from html.parser import HTMLParser
@@ -124,6 +186,8 @@ class SEOParser(HTMLParser):
         self.title_text = []
         self.meta_desc = ""
         self.ids = []
+        self.hreflangs = set()
+        self.has_canonical = False
     def handle_starttag(self, tag, attrs):
         d = dict(attrs)
         if tag == "html":
@@ -134,6 +198,10 @@ class SEOParser(HTMLParser):
             self.in_title = True
         elif tag == "meta" and d.get("name") == "description":
             self.meta_desc = d.get("content", "").strip()
+        elif tag == "link" and d.get("rel") == "canonical" and d.get("href"):
+            self.has_canonical = True
+        elif tag == "link" and d.get("rel") == "alternate" and d.get("hreflang"):
+            self.hreflangs.add(d["hreflang"])
         if "id" in d:
             self.ids.append(d["id"])
     def handle_endtag(self, tag):
@@ -144,52 +212,62 @@ class SEOParser(HTMLParser):
             self.title_text.append(data)
 
 for f in sorted(site.rglob("*.html")):
+    rel = f.relative_to(site).as_posix()
     txt = f.read_text(encoding="utf-8")
     assert "\x00" not in txt, f"{f}: leaked placeholder"
     p = SEOParser()
     p.feed(txt)
-    assert p.lang == "pt-BR", f"{f}: lang={p.lang}"
+    expected_lang = "pt-BR" if rel.startswith("pt/") else "en"
+    assert p.lang == expected_lang, f"{f}: lang={p.lang}, expected {expected_lang}"
     assert p.h1 == 1, f"{f}: h1 count={p.h1}"
     assert "".join(p.title_text).strip(), f"{f}: empty <title>"
     assert len(p.meta_desc) >= 20, f"{f}: missing/short meta description"
+    assert p.has_canonical, f"{f}: missing canonical link"
+    assert p.hreflangs == {"en", "pt-BR", "x-default"}, f"{f}: hreflangs={p.hreflangs}"
     assert len(p.ids) == len(set(p.ids)), f"{f}: duplicate element IDs"
 PY
 '
 
-ck "SPEC-0011/5: prosa auto-linka ADR-NNNN/SPEC-NNNN mas preserva blocos <pre><code> literais" '
+ck "SPEC-0011/5: prose auto-links ADR-NNNN/SPEC-NNNN within each locale while keeping <pre><code> blocks literal" '
 python3 - "$OUT1" << "PY"
 import pathlib, re, sys
-std = (pathlib.Path(sys.argv[1]) / "standard/index.html").read_text(encoding="utf-8")
-assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0017-[^\"]+\">ADR-0017</a>", std), "ADR-0017 not linked in prose"
-assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0009-[^\"]+\">ADR-0009</a>", std), "ADR-0009 not linked in prose"
-m_code = re.search(r"<pre><code[^>]*>[^<]*builds-on: \[ADR-0005\][^<]*</code></pre>", std)
-assert m_code is not None, "Code block with [ADR-0005] was corrupted by auto-linker"
+site = pathlib.Path(sys.argv[1])
+for std_rel in ("standard/index.html", "pt/standard/index.html"):
+    std = (site / std_rel).read_text(encoding="utf-8")
+    assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0017-[^\"]+\">ADR-0017</a>", std), f"ADR-0017 not linked in {std_rel}"
+    assert re.search(r"<a class=\"doc-inline-ref\" href=\"\.\./adr/0009-[^\"]+\">ADR-0009</a>", std), f"ADR-0009 not linked in {std_rel}"
+    m_code = re.search(r"<pre><code[^>]*>[^<]*builds-on: \[ADR-0005\][^<]*</code></pre>", std)
+    assert m_code is not None, f"Code block with [ADR-0005] was corrupted in {std_rel}"
 PY
 '
 
-ck "SPEC-0011/6: ADR superseded destaca VERDADE ATUAL e documentos exibem citado por reverso" '
+ck "SPEC-0011/6: superseded ADR-0001 highlights CURRENT TRUTH (EN) and VERDADE ATUAL (PT-BR) plus reverse downstream links" '
 python3 - "$OUT1" << "PY"
 import pathlib, sys
 site = pathlib.Path(sys.argv[1])
-adr1 = (site / "adr/0001-gate-automatizado-sem-remote/index.html").read_text(encoding="utf-8")
-assert "class=\"truth-callout\"" in adr1 and "VERDADE ATUAL" in adr1, "missing truth-callout on ADR-0001"
-assert "Superado por" in adr1 and "../../adr/0006-gate-por-host-do-remote/" in adr1, "missing superseded-by link"
-assert "Citado por (a jusante)" in adr1 and "../../adr/0004-bootstrap-casa-init/" in adr1, "missing reverse cited_by link"
 
-adr4 = (site / "adr/0004-bootstrap-casa-init/index.html").read_text(encoding="utf-8")
-assert "../../specs/0001-casa-init/" in adr4, "ADR-0004 missing downstream SPEC-0001"
+adr1_en = (site / "adr/0001-gate-automatizado-sem-remote/index.html").read_text(encoding="utf-8")
+assert "class=\"truth-callout\"" in adr1_en and "CURRENT TRUTH" in adr1_en, "missing EN truth-callout on ADR-0001"
+assert "Superseded by" in adr1_en and "../../adr/0006-gate-por-host-do-remote/" in adr1_en, "missing EN superseded-by link"
+assert "Cited by (downstream)" in adr1_en and "../../adr/0004-bootstrap-casa-init/" in adr1_en, "missing EN reverse cited_by link"
+
+adr1_pt = (site / "pt/adr/0001-gate-automatizado-sem-remote/index.html").read_text(encoding="utf-8")
+assert "class=\"truth-callout\"" in adr1_pt and "VERDADE ATUAL" in adr1_pt, "missing PT truth-callout on ADR-0001"
+assert "Superado por" in adr1_pt and "../../adr/0006-gate-por-host-do-remote/" in adr1_pt, "missing PT superseded-by link"
+assert "Citado por (a jusante)" in adr1_pt and "../../adr/0004-bootstrap-casa-init/" in adr1_pt, "missing PT reverse cited_by link"
 PY
 '
 
-ck "SPEC-0011/7: empty-states de busca e de filtro do grafo exibem e limpam estado vazio (ADR-0014)" '
+ck "SPEC-0011/7: search and graph empty-states show and clear cleanly in both EN and PT-BR (ADR-0014)" '
 python3 - "$OUT1" << "PY"
 import pathlib, shutil, subprocess, sys
 site = pathlib.Path(sys.argv[1])
-grafo = (site / "grafo/index.html").read_text(encoding="utf-8")
-assert "id=\"graph-empty-state\" hidden" in grafo, "missing graph-empty-state"
-assert "id=\"graph-reset-btn\"" in grafo, "missing graph-reset-btn"
-assert "id=\"search-empty-state\" hidden" in grafo, "missing search-empty-state"
-assert "id=\"search-clear-btn\"" in grafo, "missing search-clear-btn"
+for gp in ("graph/index.html", "pt/grafo/index.html"):
+    txt = (site / gp).read_text(encoding="utf-8")
+    assert "id=\"graph-empty-state\" hidden" in txt, f"missing graph-empty-state in {gp}"
+    assert "id=\"graph-reset-btn\"" in txt, f"missing graph-reset-btn in {gp}"
+    assert "id=\"search-empty-state\" hidden" in txt, f"missing search-empty-state in {gp}"
+    assert "id=\"search-clear-btn\"" in txt, f"missing search-clear-btn in {gp}"
 
 node_bin = shutil.which("node")
 if node_bin:
@@ -198,6 +276,7 @@ const fs = require("fs");
 const vm = require("vm");
 const code = fs.readFileSync(process.argv[1], "utf8");
 const sidx = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const lang = process.argv[3];
 
 function el(id, attrs = {}) {
   const listeners = {};
@@ -227,6 +306,7 @@ graphTable.querySelectorAll = () => [row1];
 const filterInput = el("graph-filter-input");
 const graphEmpty = el("graph-empty-state", { hidden: true });
 const resetBtn = el("graph-reset-btn");
+const countLabel = el("graph-visible-count");
 const searchOpenBtn = el("search-open-btn");
 const searchBackdrop = el("search-backdrop", { hidden: true });
 const searchInput = el("search-modal-input");
@@ -234,7 +314,7 @@ const searchResults = el("search-results-list");
 const searchEmpty = el("search-empty-state", { hidden: true });
 const searchClearBtn = el("search-clear-btn");
 const themeBtn = el("theme-toggle-btn");
-const rootEl = el("html", { "data-site-root": "./", "data-theme": "light" });
+const rootEl = el("html", { "lang": lang, "data-site-root": "./", "data-search-index": "./assets/search-index.json", "data-theme": "light" });
 const store = {};
 
 const byId = {
@@ -242,6 +322,7 @@ const byId = {
   "graph-filter-input": filterInput,
   "graph-empty-state": graphEmpty,
   "graph-reset-btn": resetBtn,
+  "graph-visible-count": countLabel,
   "search-open-btn": searchOpenBtn,
   "search-backdrop": searchBackdrop,
   "search-modal-input": searchInput,
@@ -267,21 +348,20 @@ const ctx = {
 };
 vm.runInNewContext(code, ctx);
 
-// Exercise graph empty-state and reset button
-filterInput.value = "termo-inexistente-xyz-999";
+filterInput.value = "non-existent-query-xyz-999";
 filterInput.trigger("input");
 if (graphEmpty.hidden !== false || row1.hidden !== true) process.exit(11);
+const expectedUnit = lang === "pt-BR" ? "0 documento(s)" : "0 document(s)";
+if (countLabel.textContent !== expectedUnit) process.exit(16);
 resetBtn.trigger("click");
 if (graphEmpty.hidden !== true || row1.hidden !== false || filterInput.value !== "") process.exit(12);
 
-// Exercise theme toggle persistence
 themeBtn.trigger("click");
 if (rootEl.getAttribute("data-theme") !== "dark" || store["casa-theme"] !== "dark") process.exit(13);
 
-// Exercise search modal empty-state and clear button
 searchOpenBtn.trigger("click");
 setImmediate(() => {
-  searchInput.value = "termo-inexistente-xyz-999";
+  searchInput.value = "non-existent-query-xyz-999";
   searchInput.trigger("input");
   if (searchEmpty.hidden !== false) process.exit(14);
   searchClearBtn.trigger("click");
@@ -289,13 +369,17 @@ setImmediate(() => {
 });
 """
     subprocess.run(
-        [node_bin, "-e", harness, str(site / "assets/app.js"), str(site / "assets/search-index.json")],
+        [node_bin, "-e", harness, str(site / "assets/app.js"), str(site / "assets/search-index.en.json"), "en"],
+        check=True,
+    )
+    subprocess.run(
+        [node_bin, "-e", harness, str(site / "assets/app.js"), str(site / "assets/search-index.pt.json"), "pt-BR"],
         check=True,
     )
 PY
 '
 
-ck "SPEC-0011/8: alternador de tema claro/escuro, alvos de cópia válidos e JS sintaticamente íntegro" '
+ck "SPEC-0011/8: light/dark theme toggle, valid copy targets, and syntactically valid JS across all pages" '
 python3 - "$OUT1" << "PY"
 import pathlib, subprocess, shutil, sys
 from html.parser import HTMLParser
@@ -334,10 +418,10 @@ if node_bin:
 PY
 '
 
-# ── SPEC-0011/9: Determinismo byte a byte em duas execuções consecutivas ──
+# ── SPEC-0011/9: Byte-for-byte determinism across two consecutive builds ──
 OUT2="$TMP/site2"
 python3 "$BUILD" --root "$ROOT" --out "$OUT2" >/dev/null 2>&1
-ck "SPEC-0011/9: duas execuções consecutivas geram árvores _site byte a byte idênticas" '
+ck "SPEC-0011/9: two consecutive builds produce byte-for-byte identical _site trees" '
 python3 - "$OUT1" "$OUT2" << "PY"
 import hashlib, pathlib, sys
 
@@ -354,7 +438,7 @@ assert m1 == m2, "non-deterministic build output"
 PY
 '
 
-# ── SPEC-0011/2 e 11: Derivação dinâmica sem hardcode + compatibilidade com docs-check ──
+# ── SPEC-0011/2 + SPEC-0011/11: Dynamic derivation without hardcoding + docs-check compatibility ──
 FIX="$TMP/repo-copy"
 mkdir -p "$FIX"
 (cd "$ROOT" && tar --exclude='.git' --exclude='_site' -cf - .) | (cd "$FIX" && tar -xf -)
@@ -363,48 +447,136 @@ git -C "$FIX" config user.email "test@example.com"
 git -C "$FIX" config user.name "Test"
 
 python3 - "$FIX" << 'PY'
-import pathlib, re, sys
+import json, pathlib, re, sys
 fix = pathlib.Path(sys.argv[1])
 std_p = fix / "STANDARD.md"
 std_txt = std_p.read_text(encoding="utf-8")
-std_p.write_text(re.sub(r"\*\*Versão CASA:\*\*\s*[0-9.]+", "**Versão CASA:** 9.42", std_txt, count=1), encoding="utf-8")
+std_p.write_text(re.sub(r"\*\*CASA Version:\*\*\s*[0-9.]+", "**CASA Version:** 9.42", std_txt, count=1), encoding="utf-8")
 
-adr99 = fix / "docs/adr/0099-decisao-sintetica-de-derivacao.md"
+adr99 = fix / "docs/adr/0099-synthetic-dynamic-derivation.md"
 adr99.write_text(
-    "---\nstatus: accepted\ndate: 2026-11-18\nbuilds-on: [ADR-0004]\nsuperseded-by: null\ndeciders: [maicon]\n---\n\n"
-    "# Decisão sintética para provar derivação dinâmica\n\n## Contexto e problema\n\nTeste.\n\n## Decisão\n\nOk.\n\n## Confirmação\n\n```bash\ntrue\n```\n",
+    "---\nstatus: accepted\ndate: 2026-11-19\nbuilds-on: [ADR-0004]\nsuperseded-by: null\ndeciders: [maicon]\n---\n\n"
+    "# Synthetic decision proving dynamic derivation\n\n## Context and Problem\n\nTest.\n\n## Decision\n\nOk.\n\n## Confirmation\n\n```bash\ntrue\n```\n",
     encoding="utf-8",
 )
+
+pt_docs_p = fix / "site/i18n/pt/docs.json"
+pt_docs = json.loads(pt_docs_p.read_text(encoding="utf-8"))
+pt_docs["ADR-0099"] = {
+    "title": "Decisão sintética provando derivação dinâmica",
+    "truth_callout": None,
+    "body": "# Decisão sintética provando derivação dinâmica\n\n## Contexto e problema\n\nTeste.\n",
+}
+pt_docs_p.write_text(json.dumps(pt_docs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 python3 "$FIX/scripts/docs-check" --root "$FIX" --emit-index >/dev/null 2>&1
 python3 "$FIX/scripts/build-site" --root "$FIX" --out "$FIX/_site" >/dev/null 2>&1; RC_DYN=$?
 
-ck "SPEC-0011/2: alterar versão em STANDARD.md e adicionar ADR reflete nas páginas sem hardcode" '
+ck "SPEC-0011/2: updating version in STANDARD.md and adding an ADR propagates to EN and PT-BR pages and search indices" '
     [ "$RC_DYN" -eq 0 ] &&
     grep -q "v9.42" "$FIX/_site/index.html" &&
-    grep -q "Versão 9.42" "$FIX/_site/standard/index.html" &&
-    [ -f "$FIX/_site/adr/0099-decisao-sintetica-de-derivacao/index.html" ] &&
-    grep -q "ADR-0099" "$FIX/_site/grafo/index.html" &&
-    grep -q "ADR-0099" "$FIX/_site/assets/search-index.json"
+    grep -q "Version 9.42" "$FIX/_site/standard/index.html" &&
+    grep -q "v9.42" "$FIX/_site/pt/index.html" &&
+    grep -q "Versão 9.42" "$FIX/_site/pt/standard/index.html" &&
+    [ -f "$FIX/_site/adr/0099-synthetic-dynamic-derivation/index.html" ] &&
+    [ -f "$FIX/_site/pt/adr/0099-synthetic-dynamic-derivation/index.html" ] &&
+    grep -q "ADR-0099" "$FIX/_site/graph/index.html" &&
+    grep -q "ADR-0099" "$FIX/_site/pt/grafo/index.html" &&
+    grep -q "ADR-0099" "$FIX/_site/assets/search-index.en.json" &&
+    grep -q "ADR-0099" "$FIX/_site/assets/search-index.pt.json"
 '
 
-# Restaura cópia limpa do repo com _site/ gerado na raiz para testar SPEC-0011/11 (0 erros e 0 avisos)
+# ── SPEC-0012/9: CI Translation Parity gates fail build-site when i18n diverges ──
+# 9a: New canonical EN doc missing from site/i18n/pt/docs.json
+python3 - "$FIX" << 'PY'
+import json, pathlib, sys
+fix = pathlib.Path(sys.argv[1])
+pt_docs_p = fix / "site/i18n/pt/docs.json"
+pt_docs = json.loads(pt_docs_p.read_text(encoding="utf-8"))
+del pt_docs["ADR-0099"]
+pt_docs_p.write_text(json.dumps(pt_docs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+OUT_ERR_PT="$(python3 "$FIX/scripts/build-site" --root "$FIX" --out "$TMP/fail-pt-doc" 2>&1)"; RC_ERR_PT=$?
+ck "SPEC-0012/9a: missing PT-BR translation for EN doc fails build-site" '
+    [ "$RC_ERR_PT" -ne 0 ] && echo "$OUT_ERR_PT" | grep -q "ADR-0099"
+'
+
+# 9b: Historical PT-BR doc missing from site/i18n/en/docs.json
+FIX_PARITY="$TMP/repo-parity"
+mkdir -p "$FIX_PARITY"
+(cd "$ROOT" && tar --exclude='.git' --exclude='_site' -cf - .) | (cd "$FIX_PARITY" && tar -xf -)
+python3 - "$FIX_PARITY" << 'PY'
+import json, pathlib, sys
+fix = pathlib.Path(sys.argv[1])
+en_docs_p = fix / "site/i18n/en/docs.json"
+en_docs = json.loads(en_docs_p.read_text(encoding="utf-8"))
+saved = en_docs.pop("ADR-0001")
+en_docs_p.write_text(json.dumps(en_docs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+(fix / "_saved_adr1.json").write_text(json.dumps(saved), encoding="utf-8")
+PY
+OUT_ERR_EN="$(python3 "$FIX_PARITY/scripts/build-site" --root "$FIX_PARITY" --out "$TMP/fail-en-doc" 2>&1)"; RC_ERR_EN=$?
+ck "SPEC-0012/9b: missing EN translation for historical PT-BR doc fails build-site" '
+    [ "$RC_ERR_EN" -ne 0 ] && echo "$OUT_ERR_EN" | grep -q "ADR-0001"
+'
+
+# Restore ADR-0001 and test STANDARD.md heading divergence, CHANGELOG divergence, and missing skill translation
+python3 - "$FIX_PARITY" << 'PY'
+import json, pathlib, sys
+fix = pathlib.Path(sys.argv[1])
+en_docs_p = fix / "site/i18n/en/docs.json"
+en_docs = json.loads(en_docs_p.read_text(encoding="utf-8"))
+en_docs["ADR-0001"] = json.loads((fix / "_saved_adr1.json").read_text(encoding="utf-8"))
+en_docs_p.write_text(json.dumps(en_docs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+(fix / "_saved_adr1.json").unlink()
+(fix / "STANDARD.md").write_text((fix / "STANDARD.md").read_text(encoding="utf-8") + "\n## 11. Untranslated section\n\nText.\n", encoding="utf-8")
+PY
+OUT_ERR_STD="$(python3 "$FIX_PARITY/scripts/build-site" --root "$FIX_PARITY" --out "$TMP/fail-std" 2>&1)"; RC_ERR_STD=$?
+ck "SPEC-0012/9c: STANDARD.md section divergence from site/i18n/pt/STANDARD.md fails build-site" '
+    [ "$RC_ERR_STD" -ne 0 ] && echo "$OUT_ERR_STD" | grep -q "STANDARD.md"
+'
+
+cp "$ROOT/STANDARD.md" "$FIX_PARITY/STANDARD.md"
+python3 - "$FIX_PARITY" << 'PY'
+import pathlib, sys
+fix = pathlib.Path(sys.argv[1])
+(fix / "CHANGELOG.md").write_text("## CASA 9.99 — 2099-01-01\n\n- Test.\n\n" + (fix / "CHANGELOG.md").read_text(encoding="utf-8"), encoding="utf-8")
+PY
+OUT_ERR_CHG="$(python3 "$FIX_PARITY/scripts/build-site" --root "$FIX_PARITY" --out "$TMP/fail-chg" 2>&1)"; RC_ERR_CHG=$?
+ck "SPEC-0012/9d: CHANGELOG.md version divergence from site/i18n/pt/CHANGELOG.md fails build-site" '
+    [ "$RC_ERR_CHG" -ne 0 ] && echo "$OUT_ERR_CHG" | grep -q "CHANGELOG.md"
+'
+
+cp "$ROOT/CHANGELOG.md" "$FIX_PARITY/CHANGELOG.md"
+python3 - "$FIX_PARITY" << 'PY'
+import json, pathlib, sys
+fix = pathlib.Path(sys.argv[1])
+sk_p = fix / "site/i18n/pt/skills.json"
+sk = json.loads(sk_p.read_text(encoding="utf-8"))
+del sk["casa-close"]
+sk_p.write_text(json.dumps(sk, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+OUT_ERR_SK="$(python3 "$FIX_PARITY/scripts/build-site" --root "$FIX_PARITY" --out "$TMP/fail-sk" 2>&1)"; RC_ERR_SK=$?
+ck "SPEC-0012/9e: missing casa-* skill in site/i18n/pt/skills.json fails build-site" '
+    [ "$RC_ERR_SK" -ne 0 ] && echo "$OUT_ERR_SK" | grep -q "casa-close"
+'
+
+# Clean copy with _site/ generated at root to verify SPEC-0011/11 (0 errors and 0 warnings in docs-check)
 FIX_CLEAN="$TMP/repo-clean"
 mkdir -p "$FIX_CLEAN"
 (cd "$ROOT" && tar --exclude='.git' --exclude='_site' -cf - .) | (cd "$FIX_CLEAN" && tar -xf -)
 git -C "$FIX_CLEAN" init -q
 python3 "$FIX_CLEAN/scripts/build-site" --root "$FIX_CLEAN" --out "$FIX_CLEAN/_site" >/dev/null 2>&1
 DC_OUT="$(python3 "$FIX_CLEAN/scripts/docs-check" --root "$FIX_CLEAN" 2>&1)"; DC_RC=$?
-ck "SPEC-0011/11: com _site/ gerado na raiz, docs-check sai 0 com 0 erros e 0 avisos" '
-    [ "$DC_RC" -eq 0 ] && echo "$DC_OUT" | grep -q "0 erro(s) · 0 aviso(s)"
+ck "SPEC-0011/11: with _site/ generated at repo root, docs-check exits 0 with 0 error(s) · 0 warning(s)" '
+    [ "$DC_RC" -eq 0 ] && echo "$DC_OUT" | grep -q "0 error(s) · 0 warning(s)"
 '
 
-# ── SPEC-0011/10: Isolamento do casa-init (adotante não recebe build-site, test-site nem site/) ──
+# ── SPEC-0011/10 + SPEC-0012/10: casa-init isolation (adopter never receives build-site, test-site, site/, or site/i18n/) ──
 ADOPTER="$TMP/adopter"
 mkdir -p "$ADOPTER"
 git -C "$ADOPTER" init -q
 "$INIT" "$ADOPTER" --repo-id adopter-demo >/dev/null 2>&1; INIT_RC=$?
-ck "SPEC-0011/10: casa-init não copia build-site, test-site nem site/ para adotante" '
+ck "SPEC-0011/10 + SPEC-0012/10: casa-init never copies build-site, test-site, or site/ to adopter" '
     [ "$INIT_RC" -eq 0 ] &&
     [ ! -e "$ADOPTER/scripts/build-site" ] &&
     [ ! -e "$ADOPTER/scripts/test-site" ] &&

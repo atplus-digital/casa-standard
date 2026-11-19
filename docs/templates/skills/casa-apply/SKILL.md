@@ -1,23 +1,16 @@
 ---
 name: casa-apply
-description: Implementa uma Spec CASA aceita até o DoD ficar verde, respeitando os ADRs de builds-on e sem improvisar sobre questão em aberto. Use ao implementar, corrigir ou continuar uma feature descrita em docs/specs/ de um repo CASA.
+description: Implements an accepted CASA Spec until its DoD is green while honoring upstream builds-on ADRs and never improvising over open questions. Use when implementing, fixing, or resuming a feature specified under docs/specs/ in a CASA repository.
 ---
 
-# CASA · aplicar
+# CASA · apply
 
-Etapas 4–5 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada).
+Steps 4–5 of the delivery cycle — §9 of [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (pinned to the installed toolchain snapshot).
 
-1. **Confira a Spec:** `status: accepted` e nenhum `- [ ]` em `## Questões em aberto`.
-   Em `draft`, ou com questão aberta no ponto que você vai tocar: pare e pergunte — o agente
-   não improvisa sobre questão aberta (§5.2).
-2. Leia os ADRs de `builds-on` e respeite cada `## Confirmação`.
-3. Implemente caso de borda por caso de borda, escrevendo ou ajustando o teste que a linha
-   de DoD correspondente roda.
-4. Rode o DoD da Spec e o DoD global do router até tudo verde. Nunca troque ou afrouxe um
-   comando de DoD para ele passar.
-5. Anote enquanto trabalha, para o `casa-close`: gotcha não-inferível que custou tentativa,
-   estado atual que mudou (vai para capítulo de contexto) e os paths reais tocados (vão para
-   `implemented-by`).
+1. **Check the Spec:** `status: accepted` and zero unchecked `- [ ]` items under `## Open questions`. If still `draft`, or if an open question touches your scope, stop and ask — agents never improvise over open questions (§5.2).
+2. Read every ADR listed in `builds-on` and honor each `## Confirmation` check.
+3. Implement edge case by edge case, writing or updating the test invoked by the corresponding DoD command.
+4. Run both the Spec's DoD and the router's global DoD until green. Never weaken or swap out a DoD command just to make it pass.
+5. Track notes while working for `casa-close`: non-inferable gotchas that cost failed attempts, current-state changes (destined for `docs/context/`), and every real path touched (destined for `implemented-by`).
 
-O contrato precisou mudar no meio do caminho? Volte à Spec — e à revisão humana — antes de
-seguir. Código e Spec não divergem.
+Need to change the observable contract mid-flight? Update the Spec — and confirm with the human — before continuing. Code and Spec never diverge.

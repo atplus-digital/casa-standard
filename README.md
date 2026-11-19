@@ -1,58 +1,60 @@
 # CASA Standard
 
-**Contexto · ADRs · Specs · Automação** — padrão de workflow de desenvolvimento para times onde agentes de IA (Claude Code, Cursor, Opencode, Codex e similares) são executores de primeira classe.
+**Context · ADRs · Specs · Automation** — an open engineering workflow standard for teams where AI coding agents (Claude Code, Cursor, Opencode, Codex, and peers) operate as first-class executors.
 
-Critério de design: **complexidade sustentada por automação é barata; complexidade sustentada por disciplina humana apodrece.** Tudo no padrão é validado por ferramenta ou custa quase nada.
+Design criterion: **complexity sustained by automation is cheap; complexity sustained by human discipline rots.** Everything in CASA is either enforced mechanically by zero-dependency tooling or costs near nothing to keep current.
 
-## Os quatro pilares
+🌐 **Documentation site:** [English (`/` — canonical)](https://atplus-digital.github.io/casa-standard/) · [Português (`/pt/`)](https://atplus-digital.github.io/casa-standard/pt/)
 
-| | O quê | Onde |
+## The four pillars
+
+| | What | Where |
 |---|---|---|
-| **C**ontexto | Estado atual em camadas de custo de contexto: router `AGENTS.md` + capítulos sob demanda | `AGENTS.md`, `docs/context/` |
-| **A**DRs | Decisões estruturais, datadas e imutáveis (MADR 4.0 + Confirmação) | `docs/adr/` |
-| **S**pecs | Comportamento observável com DoD executável | `docs/specs/` |
-| **A**utomação | `docs-check` valida frontmatter, grafo e higiene no CI | `scripts/docs-check` |
+| **C**ontext | Current operational state organized by token cost: always-loaded `AGENTS.md` router + on-demand chapters | `AGENTS.md`, `docs/context/` |
+| **A**DRs | Structural, dated, immutable architectural decisions (MADR 4.0 + practical Confirmation) | `docs/adr/` |
+| **S**pecs | Observable behavior contracts paired with an executable Definition of Done | `docs/specs/` |
+| **A**utomation | Deterministic `docs-check` gate validating router, frontmatter, causal graph, and tree hygiene in CI | `scripts/docs-check` |
 
-## Conteúdo deste repo
+## What lives in this repository
 
-- **[Site oficial (GitHub Pages)](https://atplus-digital.github.io/casa-standard/)** — leitura editorial do `STANDARD.md`, quickstart copiável, grafo interativo de ADRs/Specs, catálogo de skills e changelog, compilado direto das fontes abaixo (ADR-0018).
-- **[STANDARD.md](STANDARD.md)** — o documento normativo. É a fonte da verdade.
-- **[CHANGELOG.md](CHANGELOG.md)** — versões do contrato CASA.
-- **[docs/templates/](docs/templates/)** — templates oficiais de `AGENTS.md`, ADR e Spec, e as skills do ciclo de entrega (`skills/casa-*`, ADR-0017).
-- **[scripts/docs-check](scripts/docs-check)** — implementação de referência do validador de CI (Python, sem dependências).
+- **[Official Website (GitHub Pages)](https://atplus-digital.github.io/casa-standard/)** — bilingual (`EN` / `PT-BR`) editorial reader for `STANDARD.md`, copyable quickstart, interactive ADR/Spec causal graph, Agent Skills catalog, and changelog, compiled directly from canonical sources (ADR-0018, ADR-0019).
+- **[STANDARD.md](STANDARD.md)** — the normative specification and single source of truth.
+- **[CHANGELOG.md](CHANGELOG.md)** — CASA contract version history and migration notes.
+- **[docs/templates/](docs/templates/)** — official templates for `AGENTS.md`, `CLAUDE.md`, ADRs, Specs, recognized chapters, CI workflows, and delivery-cycle Agent Skills (`skills/casa-*`, ADR-0017).
+- **[scripts/docs-check](scripts/docs-check)** — zero-dependency Python 3 reference validator.
 
-## Começando
+## Getting started
 
-Projeto novo ou repo existente — o bootstrap é o mesmo ([STANDARD.md §10](STANDARD.md)), um comando, sem clone:
+New project or existing repository — bootstrap is identical ([STANDARD.md §10](STANDARD.md)), one command, zero clone required:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <caminho-do-seu-repo> --repo-id <nome>
+curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh -s -- <path-to-your-repo> --repo-id <name>
 ```
 
-Sem argumentos, aplica no diretório corrente. Para pinar uma versão, a variável vai para o `sh`, não para o `curl` — `curl -fsSL …/install.sh | CASA_REF=<tag|sha> sh -s -- <caminho> --repo-id <nome>` (prefixada ao `curl`, ela não chega ao instalador, que baixa `main`). Se preferir auditar antes de executar (recomendado na primeira vez):
+With no arguments, it targets the current working directory. To pin a specific version, pass `CASA_REF` to `sh`, not `curl` — `curl -fsSL …/install.sh | CASA_REF=<tag|sha> sh -s -- <path> --repo-id <name>` (prefixing `curl` never reaches the installer, which defaults to `main`). To audit before executing (recommended on first use):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh
-less install.sh   # ~60 linhas; escreve só num mktemp e no destino
-sh install.sh <caminho-do-seu-repo> --repo-id <nome>
+less install.sh   # ~60 lines; writes only to mktemp and the target repo
+sh install.sh <path-to-your-repo> --repo-id <name>
 ```
 
-Ou o equivalente com clone: `git clone https://github.com/atplus-digital/casa-standard && casa-standard/scripts/casa-init <caminho> --repo-id <nome>`.
+Or from a local clone: `git clone https://github.com/atplus-digital/casa-standard && casa-standard/scripts/casa-init <path> --repo-id <name>`.
 
-O `casa-init` instala o validador, os templates, o router (se ausente) e o gate (CI com remote; pre-commit hook sem) — aditivo e idempotente: nunca toca o conteúdo do repo, e rodar de novo atualiza a toolchain. Num repo com docs legados, ele relata o que falta migrar; a migração em si segue o §10.
+`casa-init` installs the validator, templates, delivery-cycle skills (in T1), router (if absent), and automated gate (GitHub Actions CI with a GitHub remote; local pre-commit hook otherwise) — additive and idempotent: it never overwrites repository-owned content, and re-running updates the toolchain. In legacy repositories, it reports what needs content migration under §10; Portuguese structural markers from CASA 1.0–1.10 remain supported alongside canonical English (ADR-0019).
 
-Para validar um repo localmente:
+Validate any repository locally:
 
 ```bash
-python3 scripts/docs-check               # valida; exit 1 se houver erro
-python3 scripts/docs-check --emit-index  # regenera os README.md das pastas de docs e docs/index.json
-python3 scripts/docs-check --warn-only   # imprime tudo e sai 0 (só na janela de adoção)
+python3 scripts/docs-check               # validate; exits 1 on any error
+python3 scripts/docs-check --emit-index  # regenerate docs/{adr,specs}/README.md and docs/index.json
+python3 scripts/docs-check --warn-only   # print diagnostics and exit 0 (initial adoption window only)
 ```
 
 ## Status
 
-Versão vigente do contrato: cabeçalho do [STANDARD.md](STANDARD.md) e [CHANGELOG.md](CHANGELOG.md) — não repetida aqui (Princípio 2: um fato mora num arquivo só). Mantenedor: atplus-digital/maicon. A regra de promoção foi cumprida em 2026-06-09: repo-piloto (console-platon, 66 docs) verde no `docs-check`, e o próprio casa-standard operando sob o padrão. Mudança é PR com conversa.
+Current contract version: header of [STANDARD.md](STANDARD.md) and [CHANGELOG.md](CHANGELOG.md) — intentionally not repeated here (Principle 2: one fact lives in one file). Maintainer: `atplus-digital/maicon`. Promotion rule fulfilled on 2026-06-09 (`console-platon`, 66 docs green under `docs-check`, plus `casa-standard` dogfooding itself). Changes happen via pull requests with conversation.
 
-## Licença
+## License
 
 [MIT](LICENSE) © atplus-digital

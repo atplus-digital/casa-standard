@@ -1,81 +1,81 @@
 ---
 status: draft               # draft | accepted | implemented | deprecated
-date: AAAA-MM-DD
-builds-on: []               # ADRs que fundamentam. A spec CONSOME decisões, não as redefine.
-implemented-by: []          # paths reais (código, migrations, functions) — preenchido no fechamento
-# design-ref: <url-ou-path> # feature com UI: referência de design NÃO-normativa (ADR-0014).
-#                             Código+snapshot ganham dela em divergência; revisar é humano.
+date: YYYY-MM-DD
+builds-on: []               # foundational ADRs. A spec CONSUMES decisions; it does not redefine them.
+implemented-by: []          # real paths (code, migrations, functions) — filled in on close
+# design-ref: <url-or-path> # UI feature: NON-normative design reference (ADR-0014).
+#                             Code+snapshots win on divergence; aesthetic review is human.
 ---
 
-<!-- id é DERIVADO do filename (docs/specs/NNNN-titulo-kebab.md → SPEC-NNNN);
-     title é DERIVADO do H1 abaixo. -->
+<!-- id is DERIVED from the filename (docs/specs/NNNN-kebab-title.md → SPEC-NNNN);
+     title is DERIVED from the H1 below. -->
 
-# <comportamento em uma frase — vira o title derivado>
+# <behavior in one sentence — becomes the derived title>
 
-> Convenções compartilhadas (envelope de erro, autorização, acesso a dados):
-> `docs/context/CONVENTIONS.md`. Esta spec não as repete — só desvia delas
-> explicitamente quando necessário.
+> Shared conventions (error envelope, authorization, data access):
+> `docs/context/CONVENTIONS.md`. This spec does not repeat them — it only
+> deviates explicitly when needed.
 
-## Objetivo
-<!-- O que o usuário/sistema consegue fazer quando isto estiver implementado. -->
+## Goal
+<!-- What the user or system can do once this is implemented. -->
 
-## Fluxo
-<!-- Passo a passo do comportamento observável. -->
+## Flow
+<!-- Step-by-step observable behavior. -->
 
-## Contrato
-<!-- API/eventos/UI: entradas, saídas, formatos. O que é garantido. -->
+## Contract
+<!-- API/events/UI: inputs, outputs, formats. What is guaranteed. -->
 
-## Casos de borda
-<!-- Enumerados e DECIDIDOS. Formato sugerido: EARS, agnóstico de stack.
-     Caso sem decisão NÃO fica aqui — vai para Questões em aberto.
-     Feature com UI (ADR-0014): estados são casos de borda comuns —
-     "QUANDO a lista está vazia, DEVE exibir empty-state com CTA";
-     "QUANDO a viewport < 768px, a tabela DEVE colapsar em cards".
-     Design system/tokens/estados obrigatórios NÃO se redefinem aqui:
-     são ADR do repo, citado em builds-on. -->
+## Edge cases
+<!-- Enumerated and DECIDED. Suggested format: EARS, stack-agnostic.
+     Undecided cases DO NOT belong here — put them under Open questions.
+     UI features (ADR-0014): UI states are ordinary edge cases —
+     "WHEN the list is empty, THE SYSTEM SHALL render an empty-state with CTA";
+     "WHEN viewport < 768px, THE SYSTEM SHALL collapse the table into cards".
+     Design systems, tokens, and mandatory global states are NOT redefined here:
+     they live in a repo ADR cited in builds-on. -->
 
-| # | QUANDO ⟨gatilho⟩ | o sistema DEVE ⟨resposta⟩ |
+| # | WHEN ⟨trigger⟩ | THE SYSTEM SHALL ⟨response⟩ |
 |---|---|---|
 | 1 |  |  |
 
-## Questões em aberto
-<!-- Cada item BLOQUEIA o ponto correspondente da implementação —
-     o agente não improvisa sobre questão aberta. -->
+## Open questions
+<!-- Every unchecked item BLOCKS that part of the implementation —
+     the agent never improvises over an open question. -->
 
 - [ ] 
 
 ## Definition of Done
-<!-- OBRIGATÓRIO antes de sair de draft. Comandos com critério binário,
-     executáveis no ambiente do AGENTS.md.
-     Fecha o loop DESTA spec (§7, ADR-0012): cada caso de borda enumerado acima
-     precisa de linha aqui — ou teste referenciado — que o exercite; cite os
-     números dos casos no comentário. DoD só com comandos genéricos do repo
-     (subconjunto do DoD global do router) é sinal de spec sem fechamento próprio.
-     Estados de UI: use comando REAL do repo que os exercite (teste de componente,
-     regressão visual, a11y — se a toolchain existir). NUNCA copie comando de
-     exemplo que o repo não tem: passa no docs-check e mente (ADR-0014). -->
+<!-- REQUIRED before leaving draft. Commands with binary pass criteria,
+     executable in the environment described in AGENTS.md.
+     Closes THIS spec's loop (§7, ADR-0012): every edge case enumerated above
+     needs a line here — or a test invoked by one — that exercises it; cite case
+     numbers in the comment. A DoD containing only generic repo commands
+     (subset of the router's global DoD) signals a spec without its own closure.
+     UI states: use a REAL repo command that exercises them (component test,
+     visual regression, a11y — if the toolchain exists). NEVER copy sample
+     commands the repo lacks: it passes docs-check and lies (ADR-0014). -->
 
 ```bash
 npm run typecheck                 # exit 0
-npm test -- --run <escopo>        # N/N verdes — casos <nºs da tabela acima>
+npm test -- --run <scope>         # N/N green — cases <numbers from table above>
 ```
 
-## Revisão humana
-<!-- O que exige olho humano e NÃO está no loop do agente. -->
+## Human review
+<!-- What requires human judgment and is NOT inside the agent's automated loop. -->
 
 - 
 
-## Verificação
-<!-- Preenchida no FECHAMENTO (transição para implemented, mesmo commit que
-     preenche implemented-by): evidência do DoD — comandos rodados + resultado. -->
+## Verification
+<!-- Filled in ON CLOSE (transition to implemented, same commit that populates
+     implemented-by): DoD evidence — commands executed + outcome. -->
 
 ```text
-(preencher no fechamento)
+(fill in on close)
 ```
 
-<!-- Checklist de fechamento (um commit):
-     [ ] DoD verde, evidência acima
-     [ ] status: implemented + implemented-by com paths reais
-     [ ] gotchas novos → AGENTS.md
-     [ ] estado atual novo → capítulo de contexto pertinente
-     [ ] scripts/docs-check --emit-index (READMEs regenerados) -->
+<!-- Close checklist (single atomic commit):
+     [ ] DoD green, evidence recorded above
+     [ ] status: implemented + implemented-by with real paths
+     [ ] new non-inferable gotchas → AGENTS.md
+     [ ] new current state → relevant context chapter
+     [ ] scripts/docs-check --emit-index (READMEs regenerated) -->

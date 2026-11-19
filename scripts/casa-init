@@ -1,42 +1,43 @@
 #!/usr/bin/env python3
 """
-casa-init — instala e atualiza a infraestrutura do CASA Standard num repo
-adotante, em qualquer estado: vazio, novo, legado, com docs ADR/SDD.
-Decisão: ADR-0004 · comportamento: SPEC-0001.
+casa-init — installs and updates CASA Standard infrastructure in an adopting
+repository in any state: empty, greenfield, legacy, or with existing ADR/SDD docs.
+Decision: ADR-0004 · behavior: SPEC-0001.
 
-Uso:
-  scripts/casa-init <destino> [--repo-id NOME] [--tier T0|T1]
+Usage:
+  scripts/casa-init <target> [--repo-id NAME] [--tier T0|T1]
 
-Aditivo e idempotente:
-  - Toolchain (da ferramenta; sobrescreve quando difere): scripts/docs-check,
-    scripts/pre-commit e docs/templates/*.
-  - Identidade (do repo; nunca sobrescreve): AGENTS.md é criado do template só
-    se ausente — com repo-id, tier, casa-version e casa-standard-ref carimbados; se
-    existir, apenas casa-standard-ref é atualizado; casa-version é a promessa do
-    repo (ADR-0010) — inserida só se ausente, nunca alterada. CLAUDE.md (ponte de
-    host, ADR-0009) é criado do template só se ausente; existente nunca é tocado
-    (AVISO se falta @AGENTS.md).
-  - Skills do ciclo (ADR-0017, só T1): casa-explore/propose/apply/verify/close em
-    .agents/skills/ e .claude/skills/ — da toolchain, atualizadas quando divergem; skill
-    do repo com outro nome nunca é tocada.
-  - Gate (ADR-0006): remote GitHub → workflow de CI (criado se ausente, com o branch
-    padrão do repo; existente e divergente do template → AVISO, nunca sobrescrito);
-    sem remote ou host sem adaptador de CI → pre-commit hook no diretório de hooks
-    EFETIVO do git (core.hooksPath, worktree), com AVISO quando há remote (hook alheio
-    não é tocado); sem .git → orienta; destino dentro de outro repo sem ser a raiz →
-    não instala gate (hook e CI valem para a raiz) e orienta.
-  - Diagnóstico: roda o docs-check do destino ao final e relata. Migração de
-    conteúdo legado é trabalho humano (STANDARD §10), não deste script.
+Additive and idempotent:
+  - Toolchain (tool-owned; overwritten on drift): scripts/docs-check,
+    scripts/docs-reserve, scripts/casa-update-check, scripts/pre-commit, and
+    docs/templates/*.
+  - Identity (repo-owned; never overwritten): AGENTS.md is created from template
+    only if missing — stamped with repo-id, tier, casa-version, and casa-standard-ref;
+    if present, only casa-standard-ref is updated; casa-version is the repo's own
+    promise (ADR-0010) — inserted only if missing, never altered. CLAUDE.md (host shim,
+    ADR-0009) is created from template only if missing; existing files are never
+    touched (WARNING if @AGENTS.md is absent).
+  - Delivery-cycle skills (ADR-0017, T1 only): casa-explore/propose/apply/verify/close
+    in .agents/skills/ and .claude/skills/ — tool-owned, updated on drift; custom repo
+    skills with other names are never touched.
+  - Gate (ADR-0006): GitHub remote → CI workflows (created if missing using the repo's
+    default branch; existing divergent workflow → WARNING, never overwritten); no
+    remote or host without CI adapter → pre-commit hook in git's EFFECTIVE hooks
+    directory (core.hooksPath, worktree), with WARNING when a remote exists (foreign
+    hooks are never touched); no .git → prints guidance; target inside a parent repo
+    without being its root → skips gate installation and prints guidance.
+  - Diagnostic: runs target's docs-check at the end and reports status. Legacy content
+    migration is human work (STANDARD §10), not performed by this script.
 
-NUNCA toca: docs/adr|specs|context, README, LICENSE, código do repo.
-Exit 0 = instalação concluída (pendência de migração é relatório, não falha).
+NEVER touches: docs/adr|specs|context, README, LICENSE, or application code.
+Exit 0 = installation completed (pending content migration is reported, not a failure).
 """
 import argparse, filecmp, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
-# Deve ser idêntica à CONTRACT_VERSION do docs-check (ADR-0010) — teste guarda a sincronia.
-CASA_VERSION = "1.10"
+# Must match CONTRACT_VERSION in docs-check (ADR-0010) — test-casa-init guards sync.
+CASA_VERSION = "1.11"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",
@@ -50,28 +51,28 @@ TOOLCHAIN = [
     "docs/templates/docs-check.workflow.yml",
     "docs/templates/casa-update-check.workflow.yml",
 ]
-# Pontes por host (ADR-0009) — conjunto FECHADO: host de agente que não lê AGENTS.md
-# recebe um arquivo-ponte que importa o router. Host novo entra por ADR, nunca ad-hoc.
+# Host shims (ADR-0009) — CLOSED set: agent hosts that do not read AGENTS.md natively
+# receive a shim importing the router. Adding a host requires an ADR, never ad-hoc edits.
 HOST_SHIM = ("CLAUDE.md", "docs/templates/CLAUDE.template.md", "@AGENTS.md")
-# Skills do ciclo de entrega (ADR-0017): da TOOLCHAIN — casa-* atualizadas quando divergem;
-# skill do repo com outro nome nunca é tocada. Diretórios em conjunto FECHADO: a convenção
-# entre clientes (.agents/skills) + a do host que não a lê (Claude Code). Novo = ADR.
+# Delivery-cycle skills (ADR-0017): tool-owned — casa-* updated on drift; repo skills
+# under other names are never touched. Target directories form a CLOSED set: cross-client
+# convention (.agents/skills) + Claude Code (.claude/skills). New directory = ADR.
 SKILLS = ["casa-explore", "casa-propose", "casa-apply", "casa-verify", "casa-close"]
 SKILL_DIRS = [".agents/skills", ".claude/skills"]
-SKILL_MARKER = "\n# CASA · "  # cabeçalho presente nas skills casa-* de toda versão
-# Skill casa-* renomeada ou retirada numa versão futura: listada aqui, sai do adotante.
+SKILL_MARKER = "\n# CASA · "  # heading present in casa-* skills across every version
+# Retired or renamed casa-* skills in future versions: listed here to clean up adopters.
 RETIRED_SKILLS = []
-# Workflows instalados quando o remote é GitHub (ADR-0006): gate + update-check (ADR-0016).
+# Workflows installed when remote host is GitHub (ADR-0006): gate + update-check (ADR-0016).
 GITHUB_WORKFLOWS = [
     ("docs/templates/docs-check.workflow.yml", ".github/workflows/docs-check.yml",
      "gate: CI"),
     ("docs/templates/casa-update-check.workflow.yml", ".github/workflows/casa-update-check.yml",
-     "update-check agendado, ADR-0016"),
+     "scheduled update-check, ADR-0016"),
 ]
 
 
 def utf8_stdio():
-    # Windows usa cp1252 no stdout redirecionado; a saída tem não-ASCII ("→").
+    # Windows defaults to cp1252 on redirected stdout; output contains non-ASCII ("→").
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8", errors="replace")
@@ -83,7 +84,7 @@ def sh(args, cwd=None):
 
 
 def remote_host(url):
-    """Host de uma URL de remote: https/ssh (scheme://[user@]host/…) e scp-like (user@host:…)."""
+    """Extract host from a git remote URL: https/ssh (scheme://[user@]host/…) and scp-like."""
     m = re.match(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)", url, re.I)
     if not m:
         m = re.match(r"^(?:[^@/]+@)?([^:/]+):", url)
@@ -91,13 +92,13 @@ def remote_host(url):
 
 
 def default_branch(target):
-    """Branch padrão do repo, para o gatilho `push` do workflow. Nunca o branch corrente
-    (pode ser o de feature em que a adoção está sendo feita)."""
+    """Repository default branch for workflow `push` triggers — never the current branch
+    (which may be the feature branch where CASA adoption is taking place)."""
     r = sh(["git", "-C", str(target), "symbolic-ref", "--quiet", "--short",
             "refs/remotes/origin/HEAD"])
     if r.returncode == 0 and "/" in r.stdout.strip():
         return r.stdout.strip().split("/", 1)[1]
-    # `git push` não grava origin/HEAD: repo criado local e publicado depois cai aqui.
+    # `git push` does not write origin/HEAD: locally created repos pushed later land here.
     remote = [ln[len("refs/remotes/origin/"):] for ln in sh(
         ["git", "-C", str(target), "for-each-ref", "--format=%(refname)",
          "refs/remotes/origin/"]).stdout.split() if not ln.endswith("/HEAD")]
@@ -114,14 +115,14 @@ def default_branch(target):
 
 
 def render_workflow(tpl_text, branch):
-    """O template traz `branches: [main]`; o repo recebe o seu branch padrão."""
+    """Templates ship `branches: [main]`; adopters receive their actual default branch."""
     return tpl_text.replace("    branches: [main]\n", f"    branches: [{branch}]\n", 1)
 
 
 def src_ref():
     env = os.environ.get("CASA_STANDARD_REF")
     if env:
-        return env  # setado pelo install.sh (SPEC-0002): ref pinado ou sha de main
+        return env  # set by install.sh (SPEC-0002): pinned ref or main sha
     r = sh(["git", "-C", str(SRC), "rev-parse", "--short", "HEAD"])
     return r.stdout.strip() if r.returncode == 0 else "unknown"
 
@@ -131,9 +132,9 @@ def say(tag, msg):
 
 
 def upsert_router_meta(text, ref):
-    """casa-standard-ref é da ferramenta: sempre atualizado. casa-version é a PROMESSA do
-    repo (ADR-0010): inserida só se ausente, NUNCA alterada — atualizá-la é ato deliberado
-    de quem leu o CHANGELOG; o docs-check sinaliza enquanto declaração e toolchain divergirem."""
+    """casa-standard-ref is tool-owned: always updated. casa-version is the repo's PROMISE
+    (ADR-0010): inserted only if missing, NEVER altered — bumping it is a deliberate act
+    after reading CHANGELOG; docs-check warns while declaration and toolchain diverge."""
     lines = text.splitlines()
     try:
         start = next(i for i, ln in enumerate(lines) if ln.strip().lower() == "```yaml")
@@ -175,8 +176,8 @@ def _is_casa_skill(path):
 
 
 def router_tier(text, fallback):
-    """Lê casa-tier do bloco yaml do router (sem comentário HTML, aceitando aspas e comentário
-    inline como o docs-check); sem declaração no router existente, usa --tier."""
+    """Read casa-tier from the router's yaml block (ignoring HTML comments, accepting quotes
+    and inline comments like docs-check); falls back to --tier if absent."""
     visible = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     yb = re.search(r"```yaml\s*\n(.*?)\n```", visible, flags=re.I | re.S)
     if yb:
@@ -189,9 +190,9 @@ def router_tier(text, fallback):
 
 
 def render_skill(data, ref):
-    """O link do template aponta para o STANDARD em `main`; o adotante recebe o STANDARD do
-    snapshot da toolchain instalada (casa-standard-ref) — o que as skills descrevem."""
-    data = data.replace(b"\r\n", b"\n")  # clone Windows com core.autocrlf=true → LF
+    """Template links point to STANDARD on `main`; adopters get links pinned to the
+    installed toolchain snapshot (casa-standard-ref)."""
+    data = data.replace(b"\r\n", b"\n")  # Windows clone with core.autocrlf=true → LF
     if re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]*", ref or "") and ref not in ("unknown", "local"):
         return data.replace(b"/casa-standard/blob/main/", f"/casa-standard/blob/{ref}/".encode())
     return data
@@ -218,13 +219,13 @@ def remove_casa_skills(target):
 
 def install_skills(target, ref):
     for base in SKILL_DIRS:
-        count = {"criado": 0, "atualizado": 0, "em dia": 0, "removido": 0}
+        count = {"created": 0, "updated": 0, "up to date": 0, "removed": 0}
         try:
-            for name in RETIRED_SKILLS:  # skill casa-* aposentada: sai, se for mesmo nossa
+            for name in RETIRED_SKILLS:  # retired casa-* skill: remove only if ours
                 old = target / base / name / "SKILL.md"
                 if old.is_file() and _is_casa_skill(old):
                     shutil.rmtree(old.parent)
-                    count["removido"] += 1
+                    count["removed"] += 1
             for name in SKILLS:
                 data = render_skill((SRC / "docs/templates/skills" / name / "SKILL.md").read_bytes(), ref)
                 dest = target / base / name / "SKILL.md"
@@ -232,74 +233,76 @@ def install_skills(target, ref):
                 if dest.is_symlink() and not dest.exists():
                     dest.unlink()
                 if not dest.exists():
-                    count["criado"] += 1
+                    count["created"] += 1
                 elif dest.read_bytes() != data:
-                    count["atualizado"] += 1
+                    count["updated"] += 1
                 else:
-                    count["em dia"] += 1
+                    count["up to date"] += 1
                     continue
-                dest.write_bytes(data)  # bytes: preserva LF no Windows
-        except OSError as e:  # ex.: `.claude` é arquivo — não derruba o resto da instalação
-            say("AVISO", f"{base}: não consegui instalar as skills do ciclo ({e}) — siga sem elas "
-                         "ou libere o diretório (ADR-0017)")
+                dest.write_bytes(data)  # bytes: preserves LF on Windows
+        except OSError as e:  # e.g., `.claude` is a regular file — do not abort installation
+            say("WARNING", f"{base}: could not install cycle skills ({e}) — continue without "
+                           "them or free the directory path (ADR-0017)")
             continue
-        tag = next((k for k in ("criado", "atualizado", "removido") if count[k]), "em dia")
+        tag = next((k for k in ("created", "updated", "removed") if count[k]), "up to date")
         detail = ", ".join(f"{v} {k}" for k, v in count.items() if v)
-        say(tag, f"{base}/casa-* (skills do ciclo, ADR-0017: {detail})")
+        say(tag, f"{base}/casa-* (cycle skills, ADR-0017: {detail})")
         if sh(["git", "-C", str(target), "check-ignore", "-q",
                f"{base}/{SKILLS[0]}/SKILL.md"]).returncode == 0:
-            say("AVISO", f"{base}/ está no .gitignore — as skills ficam só nesta máquina; "
-                         "versione-as para o time e os agentes do CI (ADR-0017)")
+            say("WARNING", f"{base}/ is ignored by .gitignore — skills stay only on this "
+                           "machine; track them in git for teammates and CI agents (ADR-0017)")
 
 
-HOOK_MARKER = "Gate local do CASA Standard"  # frase presente no scripts/pre-commit de toda versão
+# Recognizes both canonical EN (1.11+) and legacy PT-BR (1.0–1.10) CASA pre-commit hooks.
+HOOK_MARKERS = ("CASA Standard local gate", "Gate local do CASA Standard")
 
 
 def _is_casa_hook(path):
-    """Hook instalado por alguma versão do casa-init (cópia ou link) — pode ser atualizado."""
+    """True if hook was installed by any version of casa-init (copy or symlink)."""
     try:
-        return HOOK_MARKER in path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return any(m in text for m in HOOK_MARKERS)
     except OSError:
-        return path.is_symlink()  # link quebrado: resto de instalação CASA (worktree removido)
+        return path.is_symlink()  # broken symlink: leftover CASA hook from removed worktree
 
 
 def install_hook(target):
-    """pre-commit no diretório de hooks EFETIVO (core.hooksPath, diretório comum de worktree)
-    — desde que seja do PRÓPRIO repo: hooksPath global valeria para todos os repos da máquina."""
+    """Install pre-commit in git's EFFECTIVE hooks directory (core.hooksPath, common worktree
+    dir) — provided it belongs to THIS repo: global hooksPath would affect every repo."""
     def gitpath(*args):
         p = Path(sh(["git", "-C", str(target), "rev-parse", *args]).stdout.strip())
         return (p if p.is_absolute() else target / p).resolve()
     hook = gitpath("--git-path", "hooks/pre-commit")
     hooks_dir, common = hook.parent, gitpath("--git-common-dir")
     if not any(base == hooks_dir or base in hooks_dir.parents for base in (target, common)):
-        say("AVISO", f"core.hooksPath aponta para fora deste repo ({hooks_dir}) — provavelmente "
-                     "configuração global: não instalo um hook que valeria para outros repos; "
-                     "chame `scripts/pre-commit` pelo seu gerenciador de hooks (STANDARD §3)")
+        say("WARNING", f"core.hooksPath points outside this repo ({hooks_dir}) — likely global "
+                       "git config: refusing to install a hook affecting other repos; invoke "
+                       "`scripts/pre-commit` from your hook manager (STANDARD §3)")
         return
     hooks_cfg = sh(["git", "-C", str(target), "config", "--get", "core.hooksPath"]).stdout.strip()
     if hooks_cfg:
-        say("nota", f"core.hooksPath={hooks_cfg}: o hook vai para o diretório configurado")
+        say("note", f"core.hooksPath={hooks_cfg}: installing hook into configured directory")
     ours = target / "scripts" / "pre-commit"
     rel = os.path.relpath(hook, target)
-    verb = "criado"
+    verb = "created"
     if hook.exists() or hook.is_symlink():
         try:
             same = hook.resolve() == ours.resolve() or hook.read_bytes() == ours.read_bytes()
         except OSError:
             same = False
         if same:
-            say("em dia", f"{rel} (gate: local)")
+            say("up to date", f"{rel} (gate: local)")
             return
         if not _is_casa_hook(hook):
-            say("AVISO", f"{hook} existe e não é o do CASA — não toco; "
-                         "integre `scripts/docs-check` a ele")
+            say("WARNING", f"{hook} exists and is not a CASA hook — leaving untouched; "
+                           "integrate `scripts/docs-check` into it manually")
             return
-        hook.unlink()  # cópia/link de versão anterior do CASA: atualiza
-        verb = "atualizado"
+        hook.unlink()  # copy/symlink from an earlier CASA version: upgrade in place
+        verb = "updated"
     hook.parent.mkdir(parents=True, exist_ok=True)
-    # Symlink só quando o hook mora dentro deste checkout; num worktree o diretório de hooks é
-    # COMUM a todos os checkouts — vai cópia, que resolve o validador pelo toplevel de quem
-    # commita (e um link para outro worktree apodreceria).
+    # Symlink only when hooks_dir lives inside this checkout; in a worktree, hooks_dir is
+    # SHARED across checkouts — copy the file so it resolves docs-check from the committer's
+    # own worktree toplevel rather than rotting if the worktree is removed.
     try:
         if not (target == hooks_dir or target in hooks_dir.parents):
             raise OSError
@@ -313,91 +316,91 @@ def install_hook(target):
 def main():
     utf8_stdio()
     ap = argparse.ArgumentParser(
-        description="instala/atualiza a infraestrutura CASA num repo (SPEC-0001)")
-    ap.add_argument("destino")
+        description="install/update CASA Standard infrastructure in a repository (SPEC-0001)")
+    ap.add_argument("target")
     ap.add_argument("--repo-id", default=None)
     ap.add_argument("--tier", choices=["T0", "T1"], default="T1")
     args = ap.parse_args()
 
-    target = Path(args.destino).expanduser().resolve()
+    target = Path(args.target).expanduser().resolve()
     if target == SRC:
-        sys.exit("casa-init: o destino é o próprio casa-standard — nada a fazer.")
+        sys.exit("casa-init: target is casa-standard itself — nothing to do.")
     if target.exists() and not target.is_dir():
-        sys.exit(f"casa-init: destino não é diretório: {target}")
+        sys.exit(f"casa-init: target is not a directory: {target}")
     target.mkdir(parents=True, exist_ok=True)
     repo_id = args.repo_id or target.name
     ref = src_ref()
 
-    # 1. Toolchain — propriedade da ferramenta
+    # 1. Toolchain — tool-owned
     for rel in TOOLCHAIN:
         s, d = SRC / rel, target / rel
         d.parent.mkdir(parents=True, exist_ok=True)
         if not d.exists():
             shutil.copy2(s, d)
-            say("criado", rel)
+            say("created", rel)
         elif not filecmp.cmp(s, d, shallow=False):
             shutil.copy2(s, d)
-            say("atualizado", rel)
+            say("updated", rel)
         else:
-            say("em dia", rel)
+            say("up to date", rel)
     for rel in ("scripts/docs-check", "scripts/docs-reserve", "scripts/casa-update-check",
                 "scripts/pre-commit"):
         (target / rel).chmod(0o755)
 
-    # 2. Identidade — propriedade do repo (só a linha casa-standard-ref é da ferramenta)
+    # 2. Identity — repo-owned (only casa-standard-ref is tool-owned)
     router = target / "AGENTS.md"
     if not router.exists():
         text = (SRC / "docs/templates/AGENTS.template.md").read_text(encoding="utf-8")
-        text = text.replace("<nome-canonico-do-repo>", repo_id)
+        text = text.replace("<repo-canonical-name>", repo_id).replace("<nome-canonico-do-repo>", repo_id)
         if args.tier == "T0":
             text = text.replace("casa-tier: T1", "casa-tier: T0", 1)
         text = re.sub(r"casa-version: \S+", f"casa-version: {CASA_VERSION}", text, count=1)
         text = text.replace("casa-standard-ref: <sha>", f"casa-standard-ref: {ref}", 1)
-        # write_bytes (não write_text) preserva LF no Windows — write_text traduz \n→\r\n
+        # write_bytes preserves LF on Windows (write_text translates \n → \r\n)
         router.write_bytes(text.encode("utf-8"))
-        say("criado", f"AGENTS.md (router; repo-id={repo_id}, tier={args.tier} — preencha as seções)")
+        say("created", f"AGENTS.md (router; repo-id={repo_id}, tier={args.tier} — fill in sections)")
     else:
         old = router.read_text(encoding="utf-8")
         new, changed = upsert_router_meta(old, ref)
         if new != old:
-            router.write_bytes(new.encode("utf-8"))  # preserva LF no Windows (ver acima)
-            say("atualizado", "AGENTS.md: " + "; ".join(changed))
+            router.write_bytes(new.encode("utf-8"))
+            say("updated", "AGENTS.md: " + "; ".join(changed))
         else:
-            say("preservado", "AGENTS.md (router é do repo — não sobrescrevo)")
+            say("preserved", "AGENTS.md (router belongs to the repo — never overwritten)")
 
-    # 2b. Ponte de host (ADR-0009): Claude Code não lê AGENTS.md — CLAUDE.md importa o
-    # router. Criada só se ausente; existente é identidade do repo, nunca tocada.
+    # 2b. Host shim (ADR-0009): Claude Code does not read AGENTS.md natively — CLAUDE.md
+    # imports the router. Created only if missing; existing file is repo identity.
     shim_name, shim_tpl, shim_marker = HOST_SHIM
     shim = target / shim_name
     if not shim.exists():
         text = (SRC / shim_tpl).read_text(encoding="utf-8")
-        shim.write_bytes(text.encode("utf-8"))  # preserva LF no Windows (ver acima)
-        say("criado", f"{shim_name} (ponte → AGENTS.md, ADR-0009)")
+        shim.write_bytes(text.encode("utf-8"))
+        say("created", f"{shim_name} (shim → AGENTS.md, ADR-0009)")
     elif shim_marker in shim.read_text(encoding="utf-8"):
-        say("em dia", f"{shim_name} (ponte → AGENTS.md)")
+        say("up to date", f"{shim_name} (shim → AGENTS.md)")
     else:
-        say("AVISO", f"{shim_name} existe sem `{shim_marker}` — o Claude Code não carrega "
-                     f"o router; adicione a linha `{shim_marker}` (ADR-0009)")
+        say("WARNING", f"{shim_name} exists without `{shim_marker}` — Claude Code will not "
+                       f"load the router; add `{shim_marker}` (ADR-0009)")
 
-    # 2c. Skills do ciclo (ADR-0017) — só em T1: T0 não tem ADR/Spec para o ciclo operar.
+    # 2c. Delivery-cycle skills (ADR-0017) — T1 only: T0 repos have no ADRs/Specs.
     if router_tier(router.read_text(encoding="utf-8", errors="replace"), args.tier) == "T0":
         if remove_casa_skills(target):
-            say("removido", "skills do ciclo (casa-*): repo mudou para T0 (ADR-0017)")
+            say("removed", "cycle skills (casa-*): repo switched to T0 (ADR-0017)")
         else:
-            say("ignorado", "skills do ciclo (casa-*): repo T0 não usa ADR/Spec (ADR-0017)")
+            say("skipped", "cycle skills (casa-*): T0 repo does not use ADRs/Specs (ADR-0017)")
     else:
         install_skills(target, ref)
 
-    # 3. Gate (ADR-0006): adaptador escolhido pelo host do remote; hook é o fallback
+    # 3. Gate (ADR-0006): CI adapter selected by remote host; pre-commit hook is fallback
     r = sh(["git", "-C", str(target), "rev-parse", "--show-toplevel"])
     if r.returncode != 0:
-        say("AVISO", "sem .git: gate não instalado — rode `git init` e casa-init de novo (STANDARD §3)")
+        say("WARNING", "no .git directory: gate not installed — run `git init` then re-run casa-init (STANDARD §3)")
     elif Path(r.stdout.strip()).resolve() != target:
-        # O git achou um repo ANCESTRAL: hook e workflow valem para a raiz dele, onde não há
-        # router nem validador — instalar ali quebraria os commits do repo pai.
-        say("AVISO", f"destino está dentro do repo {r.stdout.strip()} sem ser a raiz: gate não "
-                     "instalado (hook e CI valem para a raiz) — rode `git init` no destino, ou "
-                     "o casa-init na raiz do repo (STANDARD §3)")
+        # Git found an ANCESTOR repo: hooks and workflows apply to its root, which has no
+        # router or validator — installing there would break commits in the parent repo.
+        say("WARNING", f"target is inside parent repo {r.stdout.strip()} without being its root: "
+                       "gate not installed (hooks and CI apply to the root) — run `git init` in "
+                       "target, or run casa-init at the repo root (STANDARD §3)")
     else:
         urls = [ln.split(None, 1)[1]
                 for ln in sh(["git", "-C", str(target), "config", "--get-regexp",
@@ -409,33 +412,33 @@ def main():
                 content = render_workflow((SRC / tpl).read_text(encoding="utf-8"), branch)
                 if not wf.exists():
                     wf.parent.mkdir(parents=True, exist_ok=True)
-                    wf.write_bytes(content.encode("utf-8"))  # preserva LF no Windows
-                    extra = f"; branch padrão: {branch}" if "branches:" in content else ""
-                    say("criado", f"{dest} ({label}{extra})")
+                    wf.write_bytes(content.encode("utf-8"))
+                    extra = f"; default branch: {branch}" if "branches:" in content else ""
+                    say("created", f"{dest} ({label}{extra})")
                 elif wf.read_text(encoding="utf-8") == content:
-                    say("em dia", dest)
+                    say("up to date", dest)
                 else:
-                    # O workflow é do repo (pode ter sido customizado) — nunca sobrescrito; mas
-                    # correção do template não chega sozinha: o adotante precisa saber.
-                    say("AVISO", f"{dest} difere do template desta versão — compare com {tpl} "
-                                 "e incorpore o que fizer sentido (o casa-init não sobrescreve)")
-            say("nota", f"marque o check `docs-check` como OBRIGATÓRIO na proteção do branch "
-                        f"{branch} — sem isso o CI avisa, mas não bloqueia o merge (STANDARD §3)")
+                    # Workflows belong to the repo (may be customized) — never overwritten,
+                    # but upstream template fixes won't arrive silently: warn the adopter.
+                    say("WARNING", f"{dest} differs from this version's template — compare with "
+                                   f"{tpl} and merge relevant updates (casa-init never overwrites)")
+            say("note", f"mark the `docs-check` check as REQUIRED in branch protection for "
+                        f"{branch} — otherwise CI warns without blocking merges (STANDARD §3)")
         else:
             if urls:
-                say("AVISO", f"remote sem adaptador de CI ({remote_host(urls[0]) or urls[0]}): "
-                             "gate local via pre-commit hook (ADR-0006) — integre "
-                             "`scripts/docs-check` ao CI do seu host")
+                say("WARNING", f"remote has no CI adapter ({remote_host(urls[0]) or urls[0]}): "
+                               "installed local pre-commit hook (ADR-0006) — integrate "
+                               "`scripts/docs-check` into your host's CI")
             install_hook(target)
 
-    # 4. Diagnóstico — migração de conteúdo é humana (§10)
+    # 4. Diagnostic — legacy content migration is human work (§10)
     print()
     r = sh([sys.executable, str(target / "scripts" / "docs-check")], cwd=target)
-    print(r.stdout.strip() or "(docs-check sem saída)")
+    print(r.stdout.strip() or "(docs-check produced no output)")
     if r.returncode != 0:
-        print("→ docs existentes precisam de migração de conteúdo (STANDARD §10) — o gate vai cobrar.")
+        print("→ existing docs require content migration (STANDARD §10) — the gate will enforce it.")
     else:
-        print(f"→ repo verde no CASA (origem: casa-standard@{ref}).")
+        print(f"→ repo green under CASA (source: casa-standard@{ref}).")
 
 
 if __name__ == "__main__":

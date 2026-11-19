@@ -1,24 +1,16 @@
 ---
 name: casa-verify
-description: Revisa se a implementação cumpre a Spec CASA antes do fechamento — roda o DoD e o docs-check e audita o que o gate não mecaniza — caso de borda sem teste, teste que passaria com a entrega quebrada, gotcha e estado atual não propagados. Use antes de abrir ou atualizar o PR, ou antes de marcar uma Spec como implemented.
+description: Audits whether an implementation truly satisfies its CASA Spec before close — runs the DoD and docs-check and inspects what deterministic gates cannot catch — untested edge cases, tests that would still pass if the feature broke, and unpropagated gotchas or state. Use before opening a PR or marking a Spec implemented.
 ---
 
-# CASA · verificar
+# CASA · verify
 
-§7 e §5.2 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada). **Esta etapa é assistiva, nunca gate:** o gate é o
-`docs-check` mais o DoD, ambos determinísticos. Este relatório prepara a revisão humana do
-PR; não aprova nem reprova nada sozinho.
+§7 and §5.2 of [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (pinned to the installed toolchain snapshot). **This step is assistive, never a gate:** the gate is `docs-check` plus the executable DoD, both deterministic. This audit prepares human PR review; it never approves or blocks merges on its own.
 
-1. Rode o DoD da Spec e `python3 scripts/docs-check`. Registre cada comando e o resultado.
-2. Para cada caso de borda numerado, aponte a linha do DoD ou o teste que o exercita.
-3. Para cada teste citado, responda: **em que situação ele passaria com a entrega
-   quebrada?** Procure dublê no lugar do runtime, banco ou serviço real; asserção que não
-   olha a consequência; só o caminho feliz. Diga onde a evidência para antes da
-   consequência para o produto.
-4. Prontidão para o fechamento (§5.2): gotchas novos e mudanças de estado atual já estão
-   (ou estão mapeados para o `casa-close`) em `AGENTS.md` e `docs/context/`? Se a Spec já
-   foi fechada, `implemented-by` lista só paths reais?
-5. Relatório, um item por caso: ✅ coberto · ⚠️ fraco (por quê) · ❌ sem cobertura — cada
-   ⚠️/❌ com o teste ou a linha de DoD concreta que resolveria.
+1. Run the Spec's DoD and `python3 scripts/docs-check`. Record each command and its outcome.
+2. Map every numbered edge case to the specific DoD command or test that exercises it.
+3. For each cited test, ask: **under what failure mode would this test still pass while the user-facing behavior is broken?** Look for mocks replacing the real runtime, database, or service; assertions that stop short of observable outcomes; or happy-path-only checks. State explicitly where evidence stops.
+4. Close readiness (§5.2): are new gotchas and current-state updates already propagated (or queued for `casa-close`) in `AGENTS.md` and `docs/context/`? If the Spec is already closed, does `implemented-by` list only real paths?
+5. Emit a per-case report: ✅ covered · ⚠️ weak (explain why) · ❌ uncovered — pairing every ⚠️/❌ with the concrete test or DoD command that would close the gap.
 
-Não marque a Spec como `implemented` aqui — isso é o `casa-close`.
+Do not mark the Spec `implemented` here — that belongs to `casa-close`.

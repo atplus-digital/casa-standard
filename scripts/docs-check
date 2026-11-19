@@ -1,49 +1,50 @@
 #!/usr/bin/env python3
 """
-docs-check — implementação de referência do CASA Standard (STANDARD.md §8).
+docs-check — reference validator for the CASA Standard (STANDARD.md §8).
 
-Uso:
+Usage:
   scripts/docs-check [--root .] [--emit-index] [--warn-only]
   scripts/docs-check --check-adr-immutability --base-ref origin/main
-  scripts/docs-check --staged          # pre-commit: valida o conteúdo do index
+  scripts/docs-check --staged          # pre-commit: validates the git index
 
-O que faz:
-  1. Valida o router AGENTS.md: metadados CASA, DoD global, ponteiros de contexto (entre
-     crases ou link markdown) e o invariante de capítulo RECONHECIDO (TESTS.md declarado
-     exige comando canônico — §4/§8). Comentário HTML não conta; placeholder no DoD global
-     ou no TESTS.md e DoD de exemplo do template antigo saem como AVISO.
-     Sinaliza (AVISO) casa-version incoerente com a toolchain (ADR-0010) e backlog em
-     docs/context/ (ADR-0011).
-  2. Lê docs/adr/*.md e docs/specs/*.md.
-  3. DERIVA id do filename (docs/adr/0032-x.md → ADR-0032) e title do primeiro
-     H1 do corpo (após o frontmatter; comentários HTML não contam).
-  4. Valida frontmatter: só o subconjunto YAML suportado (escalar, lista
-     inline, lista em bloco) — linha não reconhecida e chave duplicada são ERRO;
-     campos obrigatórios (status, date), data de calendário real AAAA-MM-DD,
-     vocabulário de status por camada; campo fora do vocabulário → AVISO.
-  5. Valida grafo: builds-on/superseded-by resolvem (cross-repo vira AVISO);
-     sem auto-supersessão; superseded-by só em ADR; ADR superseded exige o
-     bloco "VERDADE ATUAL" real, fora de comentário HTML.
-  6. Valida Specs: accepted/implemented exige DoD real, sem questões abertas;
-     implemented exige implemented-by resolvendo para paths reais e "## Verificação"
-     preenchida (sem o placeholder do template).
-  7. Opcionalmente valida imutabilidade de ADR aceito contra a merge-base com --base-ref:
-     corpo intocado (só frontmatter e o bloco VERDADE ATUAL do topo, até 3 linhas), sem
-     exclusão, renomeação compara pelo número, status não regride.
-  8. Higiene de árvore: ".orig", "conflicted copy" e ".DS_Store" sempre;
-     cópia numerada ("x 2.md", "x copy.md", "x (1).md") só quando o original
-     existe ao lado. Em repo git, só o que o git versiona ou versionaria (ignorado pelo
-     .gitignore não conta); fora de git, varre ignorando .git, node_modules, dist e afins.
-     --staged valida o INDEX (o que entra no commit), não a working tree — modo do
-     pre-commit.
-  9. Índices frescos: compara os READMEs gerados (e docs/index.json, se
-     existir) com os commitados e FALHA se divergirem.
-     --emit-index regenera tudo.
+What it checks:
+  1. Validates the AGENTS.md router: CASA metadata, global DoD, context pointers (backticked
+     or Markdown link targets), and RECOGNIZED chapter invariants (declared TESTS.md requires
+     at least one canonical command — §4/§8). HTML comments never count; placeholders in the
+     global DoD or TESTS.md and legacy sample DoD blocks emit WARNINGs.
+     Flags (WARNING) casa-version drift against the installed toolchain (ADR-0010) and
+     misplaced backlogs under docs/context/ (ADR-0011).
+  2. Reads docs/adr/*.md and docs/specs/*.md.
+  3. DERIVES id from filename (docs/adr/0032-x.md → ADR-0032) and title from the first
+     body H1 (after frontmatter; HTML comments ignored).
+  4. Validates frontmatter: only the supported YAML subset (scalar, inline list, block
+     list) — unrecognized lines and duplicate keys are ERRORs; required fields (status,
+     date), real YYYY-MM-DD calendar date, per-layer status vocabulary; unknown fields
+     emit WARNINGs.
+  5. Validates the causal graph: builds-on/superseded-by resolve (cross-repo emits WARNING);
+     no self-supersession; superseded-by only on ADRs; superseded ADRs require a real top
+     "CURRENT TRUTH" (or legacy "VERDADE ATUAL") callout outside HTML comments.
+  6. Validates Specs: accepted/implemented require an executable DoD without placeholders and
+     zero unchecked open questions; implemented requires implemented-by resolving to real
+     paths and a populated "## Verification" (or "## Verificação") section.
+  7. Optionally enforces accepted-ADR immutability against the merge-base with --base-ref:
+     untouched body (only frontmatter and the top CURRENT TRUTH / VERDADE ATUAL block up to
+     3 lines), no deletion, rename-proof comparison by ADR number, non-regressing status.
+  8. Tree hygiene: ".orig", "conflicted copy", and ".DS_Store" always; numbered sync copies
+     ("x 2.md", "x copy.md", "x (1).md") when the original sits alongside them. In a git
+     repo, inspects tracked + non-ignored untracked files; outside git, walks disk skipping
+     .git, node_modules, dist, etc. --staged validates the git INDEX (what will be committed)
+     rather than the working tree.
+  9. Index freshness: compares generated READMEs (and docs/index.json, if present) against
+     committed copies and FAILS on drift. --emit-index regenerates all indices.
 
-Exit: 1 se houver ERRO (default). --warn-only imprime tudo e sai 0 —
-só para a janela de adoção (STANDARD §10).
+Bilingual compatibility (CASA 1.11, ADR-0019): structural headings and placeholders are
+accepted in both canonical English and legacy Brazilian Portuguese (CASA 1.0–1.10).
 
-Sem dependências externas.
+Exit: 1 on any ERROR (default). --warn-only prints everything and exits 0 —
+strictly for the adoption window (STANDARD §10).
+
+Zero external dependencies.
 """
 import argparse, json, os, posixpath, re, shutil, subprocess, sys, tempfile
 from datetime import datetime
@@ -56,18 +57,18 @@ STATUS_VOCAB = {
 }
 REQUIRED = {"status", "date"}
 KNOWN_KEYS = {"status", "date", "builds-on", "superseded-by", "implemented-by", "deciders",
-              "design-ref"}  # design-ref: referência de design NÃO-normativa (ADR-0014)
+              "design-ref"}  # design-ref: NON-normative UI design reference (ADR-0014)
 ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-ref"}
 ROUTER_TIERS = {"T0", "T1"}
-# Versão do contrato CASA que ESTA toolchain implementa (ADR-0010). Deve ser idêntica à
-# CASA_VERSION do casa-init do mesmo snapshot — o test-casa-init guarda a sincronia.
-CONTRACT_VERSION = "1.10"
-# Capítulos de contexto RECONHECIDOS (registry FECHADO — STANDARD §4/§8): declarar o
-# ponteiro no router dispara um invariante de CONTEÚDO que mora aqui, no validador. O
-# gatilho é a DECLARAÇÃO no router, nunca a presença física do arquivo no disco; a regra
-# nunca é trazida pelo repo adotante. Estender o conjunto = ADR no casa-standard (ADR-0008).
+# CASA contract version implemented by THIS toolchain (ADR-0010). Must match CASA_VERSION
+# in casa-init from the same snapshot — test-casa-init enforces synchronization.
+CONTRACT_VERSION = "1.11"
+# RECOGNIZED context chapters (CLOSED registry — STANDARD §4/§8): declaring the pointer in
+# the router triggers a CONTENT invariant owned here by the validator. Triggered strictly by
+# DECLARATION in the router, never by physical presence on disk; adopters never bring custom
+# rules. Extending this set requires an ADR in casa-standard (ADR-0008).
 RECOGNIZED_CHAPTERS = {
-    "docs/context/TESTS.md": "TESTS",   # exige ao menos um comando canônico de teste
+    "docs/context/TESTS.md": "TESTS",   # requires at least one canonical test command
 }
 IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
                 "vendor", "__pycache__", ".next", "target", ".tox",
@@ -77,36 +78,50 @@ DUP_RE = re.compile(r"^(?P<base>.+?)(?: \d+| copy(?: \d+)?| \(\d+\))(?P<ext>\.\w
 FILENAME_RE = re.compile(r"^(\d{4})-[a-z0-9][a-z0-9-]*\.md$")
 KEY_RE = re.compile(r"^([A-Za-z][\w-]*):\s*(.*)$")
 ITEM_RE = re.compile(r"^\s*-\s+(.*)$")
-VA_RE = re.compile(r"^\s*>\s*(?:⚠️?\s*)?VERDADE ATUAL", re.M)
-VA_MAX_LINES = 3  # STANDARD §5.1: bloco de no máximo 3 linhas, no topo do ADR
-# Status de ADR cujo corpo é imutável, e para onde cada um pode ir (o status não regride:
-# accepted → proposed reabriria o corpo para edição no PR seguinte).
+# Canonical EN ("CURRENT TRUTH") + legacy PT-BR ("VERDADE ATUAL") callout marker (ADR-0019).
+VA_RE = re.compile(r"^\s*>\s*(?:⚠️?\s*)?(?:CURRENT TRUTH|VERDADE ATUAL)", re.M)
+VA_MAX_LINES = 3  # STANDARD §5.1: max 3 lines at the top of the ADR
+# ADR statuses whose body is immutable, and allowed forward transitions (status never
+# regresses: accepted → proposed would reopen the body for editing in a subsequent PR).
 IMMUTABLE_NEXT = {"accepted": {"accepted", "deprecated", "superseded"},
                   "deprecated": {"deprecated", "superseded"},
                   "superseded": {"superseded"}}
 ROUTER_LINE_CAP = 150
-PLACEHOLDER = "(preencher no fechamento)"
+ROUTER_DOD_HEADINGS = (
+    "How to validate (global repo DoD)",
+    "Como validar (DoD global do repo)",
+)
+SPEC_OPEN_QUESTIONS_HEADINGS = ("Open questions", "Questões em aberto")
+SPEC_VERIFICATION_HEADINGS = ("Verification", "Verificação")
+VERIFICATION_PLACEHOLDERS = ("(fill in on close)", "(preencher no fechamento)")
 PLACEHOLDER_RE = re.compile(
-    # <token> de template começa com letra e não termina em espaço; evita falso-positivo
-    # em redireção de shell (2>&1, cmd < arq, <in >out, here-doc <<EOF não casam).
-    r"<[A-Za-z](?:[^>\n]*[^\s>])?>|AAAA-MM-DD|\(preencher|preencher no fechamento|N/N verdes"
-    r"|comandos exatos",
+    # Template <token> starts with a letter and does not end in whitespace; avoids false
+    # positives on shell redirections (2>&1, cmd < file, <in >out, <<EOF).
+    r"<[A-Za-z](?:[^>\n]*[^\s>])?>"
+    r"|YYYY-MM-DD|AAAA-MM-DD"
+    r"|\(fill in|fill in on close|\(preencher|preencher no fechamento"
+    r"|N/N green|N/N verdes"
+    r"|exact, copyable commands|comandos exatos",
     re.I,
 )
-# Trecho entre aspas/crases é literal: em shell, <Palavra> sem aspas é redireção, então
-# num comando real ele vem citado (ex.: -t "renders <Button>"); placeholder de template não.
+# Quoted/backticked spans are literals: in shell, unquoted <Word> is redirection, so real
+# commands quote it (e.g., -t "renders <Button>"); template placeholders do not.
 QUOTED_RE = re.compile(r"'[^'\n]*'|\"[^\"\n]*\"|`[^`\n]*`")
 CODE_BLOCK_RE = re.compile(r"```[A-Za-z0-9_-]*\s*\n(.*?)\n```", re.S)
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-# Ponteiro de capítulo no router: entre crases OU como alvo de link markdown.
+# Context chapter pointer in router: backticked OR Markdown link target.
 POINTER_RE = re.compile(r"`(docs/context/[^`]+\.md)`"
                         r"|\]\(\s*(?:\./)?(docs/context/[^)\s#]+\.md)(?:#[^)\s]*)?\s*\)")
-# DoD do template de router até a 1.8: comandos de exemplo que o repo pode nem ter.
-OLD_TEMPLATE_DOD = {"npm run typecheck        # exit 0", "npm test                 # tudo verde"}
+# Legacy router template DoD (up to 1.8): sample commands the repo might not even have.
+OLD_TEMPLATE_DOD = {
+    "npm run typecheck        # exit 0",
+    "npm test                 # all green",
+    "npm test                 # tudo verde",
+}
 
 
 def split_frontmatter(text):
-    """Retorna (frontmatter_cru, corpo) ou (None, texto) se não houver frontmatter."""
+    """Return (raw_frontmatter, body) or (None, text) if absent."""
     if not text.startswith("---"):
         return None, text
     end = text.find("\n---", 3)
@@ -128,17 +143,17 @@ def _clean(v):
 
 
 def parse_frontmatter(raw):
-    """Parser do subconjunto suportado: escalar, lista inline, lista em bloco.
-    Linha fora do subconjunto vira erro — nunca é ignorada em silêncio."""
+    """Parse the supported YAML subset: scalar, inline list, block list.
+    Any unsupported line becomes an explicit error — never silently ignored."""
     fm, errs, pending = {}, [], None
-    for ln, line in enumerate(raw.splitlines(), start=2):  # linha 1 do arquivo é '---'
+    for ln, line in enumerate(raw.splitlines(), start=2):  # line 1 of the file is '---'
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
         m = ITEM_RE.match(line)
         if m:
             if pending is None:
-                errs.append(f"frontmatter linha {ln}: item de lista sem chave correspondente")
+                errs.append(f"frontmatter line {ln}: list item without a parent key")
                 continue
             if fm[pending] is None:
                 fm[pending] = []
@@ -146,17 +161,17 @@ def parse_frontmatter(raw):
             continue
         m = KEY_RE.match(line)
         if not m:
-            errs.append(f"frontmatter linha {ln}: sintaxe não suportada: {stripped!r}")
+            errs.append(f"frontmatter line {ln}: unsupported syntax: {stripped!r}")
             pending = None
             continue
         key, val = m.group(1), _strip_comment(m.group(2))
         pending = None
         if key in fm:
-            # YAML não admite chave repetida; aceitar seria deixar a última vencer em silêncio.
-            errs.append(f"frontmatter linha {ln}: chave duplicada '{key}'")
+            # YAML forbids duplicate keys; accepting would let the last win silently.
+            errs.append(f"frontmatter line {ln}: duplicate key '{key}'")
             continue
         if val == "":
-            fm[key] = None          # vazio: null escalar, ou início de lista em bloco
+            fm[key] = None          # empty: null scalar, or start of a block list
             pending = key
         elif val.startswith("[") and val.endswith("]"):
             inner = val[1:-1].strip()
@@ -190,6 +205,14 @@ def section_body(visible, heading):
     return visible[start:end]
 
 
+def section_body_any(visible, headings):
+    for h in headings:
+        sec = section_body(visible, h)
+        if sec is not None:
+            return sec
+    return None
+
+
 def executable_lines(section):
     lines = []
     for block in CODE_BLOCK_RE.findall(section or ""):
@@ -205,137 +228,136 @@ def has_placeholder(text):
 
 
 def strip_comments(text):
-    """Comentário HTML não conta como conteúdo (o exemplo do template não vale) — mesma
-    regra já aplicada ao H1 e ao bloco VERDADE ATUAL."""
+    """HTML comments do not count as content (template examples are ignored) — same rule
+    applied to H1 and CURRENT TRUTH / VERDADE ATUAL callouts."""
     return COMMENT_RE.sub("", text or "")
 
 
 def present(v):
-    """Campo obrigatório presente = não-nulo e não-vazio ('' e [] contam como ausentes)."""
+    """Required field present = non-null and non-empty ('' and [] count as missing)."""
     return v is not None and v != "" and v != []
 
 
 def validate_recognized_chapter(root, ref_path, errors, warnings):
-    """Capítulo reconhecido declarado no router: aplica o invariante de conteúdo do registry
-    FECHADO (RECOGNIZED_CHAPTERS). Hoje só TESTS.md → exige um comando canônico, reusando o
-    mesmo critério do DoD global (executable_lines). A regra mora no validador, não no repo."""
+    """Recognized chapter declared in the router: enforces its CLOSED-registry content
+    invariant (RECOGNIZED_CHAPTERS). Currently only TESTS.md → requires at least one
+    canonical command, reusing the global DoD criterion (executable_lines)."""
     label = RECOGNIZED_CHAPTERS.get(ref_path)
     if label is None:
         return
     text = strip_comments((root / ref_path).read_text(encoding="utf-8"))
     cmds = executable_lines(text)
     if not cmds:
-        errors.append(f"AGENTS.md: capítulo reconhecido {label} (`{ref_path}`) declarado no "
-                      "Mapa de contexto sem comando executável em bloco de código — liste o(s) "
-                      "comando(s) canônico(s) de teste ou remova o ponteiro (STANDARD §8)")
+        errors.append(f"AGENTS.md: recognized chapter {label} (`{ref_path}`) declared in "
+                      "the Context map has no executable command in a code block — list the "
+                      "canonical test command(s) or remove the pointer (STANDARD §8)")
     elif has_placeholder("\n".join(cmds)):
-        # aviso na janela da 1.9 (proibição nova): vira erro numa versão futura
-        warnings.append(f"AGENTS.md: capítulo reconhecido {label} (`{ref_path}`) com comando "
-                        "placeholder — liste o comando real do repo (STANDARD §8)")
+        # warning during the 1.9 transition window: becomes an error in a future release
+        warnings.append(f"AGENTS.md: recognized chapter {label} (`{ref_path}`) contains a "
+                        "placeholder command — list the repo's real command (STANDARD §8)")
 
 
 def validate_router(root, errors, warnings):
     router = root / "AGENTS.md"
     if not router.exists():
-        errors.append("AGENTS.md ausente — router é obrigatório no CASA")
+        errors.append("AGENTS.md missing — router is mandatory in CASA")
         return
 
     text = router.read_text(encoding="utf-8")
     n = len(text.splitlines())
     if n > ROUTER_LINE_CAP:
-        warnings.append(f"AGENTS.md com {n} linhas (teto ~{ROUTER_LINE_CAP}) — "
-                        "mova conteúdo para docs/context/")
+        warnings.append(f"AGENTS.md has {n} lines (~{ROUTER_LINE_CAP}-line cap) — "
+                        "move detailed content to docs/context/")
 
     visible = strip_comments(text)
     raw = first_yaml_block(visible)
     if raw is None:
-        errors.append("AGENTS.md: sem bloco ```yaml``` com metadados CASA")
+        errors.append("AGENTS.md: missing ```yaml``` block with CASA metadata")
         fm = {}
     else:
         fm, fm_errs = parse_frontmatter(raw)
         errors.extend(f"AGENTS.md: {e}" for e in fm_errs)
     for k in sorted(ROUTER_REQUIRED):
         if isinstance(fm.get(k), list):
-            errors.append(f"AGENTS.md: {k} deve ser escalar, não lista")
+            errors.append(f"AGENTS.md: {k} must be scalar, not a list")
             fm[k] = None
 
     missing = ROUTER_REQUIRED - {k for k, v in fm.items() if present(v)}
     if missing:
-        errors.append(f"AGENTS.md: metadados CASA obrigatórios ausentes: {sorted(missing)}")
+        errors.append(f"AGENTS.md: missing required CASA metadata: {sorted(missing)}")
 
     repo_id = fm.get("casa-repo-id")
     if repo_id and ("<" in str(repo_id) or not re.match(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", str(repo_id))):
-        errors.append("AGENTS.md: casa-repo-id inválido ou ainda com placeholder")
+        errors.append("AGENTS.md: casa-repo-id is invalid or still contains a placeholder")
 
     tier = fm.get("casa-tier")
     if tier and tier not in ROUTER_TIERS:
-        errors.append(f"AGENTS.md: casa-tier inválido '{tier}' (válidos: {sorted(ROUTER_TIERS)})")
+        errors.append(f"AGENTS.md: invalid casa-tier '{tier}' (valid: {sorted(ROUTER_TIERS)})")
 
     version = fm.get("casa-version")
     if version and not re.match(r"^\d+\.\d+(?:\.\d+)?$", str(version)):
-        errors.append("AGENTS.md: casa-version deve ser semver simples (ex.: 1.1)")
+        errors.append("AGENTS.md: casa-version must be simple semver (e.g., 1.1)")
     elif version:
-        # Coerência declaração × toolchain (ADR-0010): aviso, nunca erro; (major, minor).
+        # Declared contract vs. installed toolchain coherence (ADR-0010): warning, never error.
         decl = tuple(int(p) for p in str(version).split("."))[:2]
         tool = tuple(int(p) for p in CONTRACT_VERSION.split("."))[:2]
         if decl < tool:
             warnings.append(
-                f"AGENTS.md: contrato declarado (casa-version {version}) atrás da toolchain "
-                f"instalada ({CONTRACT_VERSION}) — leia o CHANGELOG do casa-standard e "
-                "atualize a declaração quando o repo cumprir o contrato novo (ADR-0010)")
+                f"AGENTS.md: declared contract (casa-version {version}) is behind the installed "
+                f"toolchain ({CONTRACT_VERSION}) — read the casa-standard CHANGELOG and update "
+                "the declaration once this repo satisfies the new contract (ADR-0010)")
         elif decl > tool:
             warnings.append(
-                f"AGENTS.md: toolchain instalada ({CONTRACT_VERSION}) atrás do contrato "
-                f"declarado (casa-version {version}) — rode scripts/casa-init a partir de "
-                "um snapshot atual do casa-standard (ADR-0010)")
+                f"AGENTS.md: installed toolchain ({CONTRACT_VERSION}) is behind the declared "
+                f"contract (casa-version {version}) — run scripts/casa-init from a current "
+                "casa-standard snapshot (ADR-0010)")
 
     ref = fm.get("casa-standard-ref")
     if ref and ("<" in str(ref) or str(ref).strip() in {"", "unknown"}):
-        errors.append("AGENTS.md: casa-standard-ref inválido ou ainda com placeholder")
+        errors.append("AGENTS.md: casa-standard-ref is invalid or still contains a placeholder")
 
-    dod = section_body(visible, "Como validar (DoD global do repo)")
+    dod = section_body_any(visible, ROUTER_DOD_HEADINGS)
     dod_lines = executable_lines(dod)
     if dod is None:
-        errors.append("AGENTS.md: sem seção '## Como validar (DoD global do repo)'")
+        errors.append("AGENTS.md: missing section '## How to validate (global repo DoD)'")
     elif not dod_lines:
-        errors.append("AGENTS.md: DoD global sem linha executável em bloco de código "
-                      "(comentário HTML não conta)")
+        errors.append("AGENTS.md: global DoD has no executable line in a code block "
+                      "(HTML comments do not count)")
     elif has_placeholder("\n".join(dod_lines)):
-        # aviso na janela da 1.9 (proibição nova): vira erro numa versão futura
-        warnings.append("AGENTS.md: DoD global contém placeholder — declare comandos reais "
-                        "(STANDARD §8; aviso na janela da 1.9)")
+        warnings.append("AGENTS.md: global DoD contains a placeholder — declare real commands "
+                        "(STANDARD §8; warning during 1.9 window)")
     elif set(dod_lines) <= OLD_TEMPLATE_DOD:
-        warnings.append("AGENTS.md: DoD global ainda é o exemplo do template (npm run "
-                        "typecheck/npm test) — troque pelos comandos reais do repo (STANDARD §7)")
+        warnings.append("AGENTS.md: global DoD still uses the legacy template sample (npm run "
+                        "typecheck/npm test) — replace with this repo's real commands (STANDARD §7)")
 
     pointers = set()
     for m in POINTER_RE.finditer(visible):
         pointers.add(m.group(1) or m.group(2))
     for ref_path in sorted(pointers):
         if not (root / ref_path).exists():
-            errors.append(f"AGENTS.md: Mapa de contexto aponta para arquivo inexistente '{ref_path}'")
+            errors.append(f"AGENTS.md: Context map points to missing file '{ref_path}'")
         else:
             validate_recognized_chapter(root, ref_path, errors, warnings)
 
 
 def check_backlog_location(root, warnings):
-    """Backlog em docs/context/ é anti-padrão (§5.1; Confirmação do ADR-0002). Aviso via
-    LISTAGEM de diretório com comparação lowercase — determinístico em filesystems
-    case-sensitive (CI) e case-insensitive (dev Windows/macOS). Decisão: ADR-0011."""
+    """Backlog inside docs/context/ is an anti-pattern (§5.1; ADR-0002 Confirmation).
+    Checked via directory listing with lowercase comparison — deterministic across
+    case-sensitive (CI) and case-insensitive (macOS/Windows) filesystems (ADR-0011)."""
     ctx = root / "docs" / "context"
     if not ctx.is_dir():
         return
     for p in sorted(ctx.iterdir()):
         if p.is_file() and p.name.lower() == "backlog.md":
             warnings.append(
-                f"docs/context/{p.name}: backlog é pendência, não estado imperativo "
-                "(STANDARD §5.1) — mova para docs/BACKLOG.md e atualize os ponteiros do "
-                "router (ADR-0011)")
+                f"docs/context/{p.name}: backlog tracks pending work, not imperative state "
+                "(STANDARD §5.1) — move to docs/BACKLOG.md and update router pointers "
+                "(ADR-0011)")
 
 
 def render_readme(label, rows):
-    lines = [f"# {label}", "", "<!-- GERADO por scripts/docs-check — não editar à mão -->", "",
-             "| id | título | status |", "|---|---|---|"]
+    lines = [f"# {label}", "", "<!-- GENERATED by scripts/docs-check — do not edit by hand -->", "",
+             "| id | title | status |", "|---|---|---|"]
     lines += [f"| [{d['id']}]({Path(d['path']).name}) | {d['title']} | {d['status']} |"
               for d in sorted(rows, key=lambda d: d["id"])]
     return "\n".join(lines) + "\n"
@@ -352,10 +374,10 @@ def _body_without_frontmatter(text):
 
 
 def split_current_truth(body):
-    """(corpo sem o 1º bloco VERDADE ATUAL do topo, linhas desse bloco). O bloco é a citação
-    que COMEÇA com o marcador antes da primeira seção '## ' — inteiro, de qualquer tamanho,
-    mais as linhas em branco logo depois. Só o PRIMEIRO: citação seguinte é corpo. O limite de
-    VA_MAX_LINES é regra à parte (check_adr_immutability), para não congelar bloco antigo."""
+    """Return (body without the 1st top CURRENT TRUTH / VERDADE ATUAL block, block lines).
+    The block is the first blockquote starting with the marker before the first '## '
+    heading — in full, plus trailing blank lines. Only the FIRST counts: later blockquotes
+    are body text. VA_MAX_LINES is checked separately so legacy long blocks aren't frozen."""
     lines = body.splitlines()
     top_end = next((n for n, ln in enumerate(lines) if ln.startswith("## ")), len(lines))
     for i in range(top_end):
@@ -381,7 +403,7 @@ def _status_of(text):
 
 
 def _read_blobs(root, shas, raw=False):
-    """Conteúdo de vários blobs num único `git cat-file --batch` (sem um processo por ADR)."""
+    """Read multiple git blobs in a single `git cat-file --batch` call."""
     if not shas:
         return {}
     r = subprocess.run(["git", "cat-file", "--batch"], cwd=root, capture_output=True,
@@ -397,16 +419,16 @@ def _read_blobs(root, shas, raw=False):
 
 
 def check_adr_immutability(root, base_ref, errors):
-    """Compara cada ADR imutável da base (merge-base com --base-ref) com o estado atual,
-    pelo NÚMERO derivado — não pelo path, para que renomear o arquivo não esconda a edição."""
+    """Compare every immutable ADR in the merge-base (--base-ref) against current state
+    by derived NUMBER — not path, so renaming a file cannot conceal body edits."""
     mb = _git(root, ["merge-base", base_ref, "HEAD"])
     if mb.returncode != 0:
-        errors.append(f"imutabilidade ADR: não foi possível comparar com '{base_ref}' "
+        errors.append(f"ADR immutability: could not compare against '{base_ref}' "
                       f"({mb.stderr.strip() or mb.stdout.strip()})")
         return
     base = mb.stdout.strip()
     tree = _git(root, ["ls-tree", base, "docs/adr/"])
-    entries = []  # (número, path na base, sha do blob)
+    entries = []  # (number, path at base, blob sha)
     for ln in tree.stdout.splitlines():
         meta, _, path = ln.partition("\t")
         m = FILENAME_RE.match(Path(path).name)
@@ -421,40 +443,39 @@ def check_adr_immutability(root, base_ref, errors):
         if m:
             current.setdefault(m.group(1), []).append(p)
 
-    where = f"em {base_ref} (merge-base {base[:7]})"
+    where = f"in {base_ref} (merge-base {base[:7]})"
     for num, old_path, sha in entries:
         old_text = blobs[sha]
         old_st = _status_of(old_text)
         if old_st not in IMMUTABLE_NEXT:
             continue
         if num not in current:
-            errors.append(f"{old_path}: ADR-{num} com status '{old_st}' {where} foi removido — "
-                          "ADR aceito não se apaga; marque superseded/deprecated")
+            errors.append(f"{old_path}: ADR-{num} with status '{old_st}' {where} was removed — "
+                          "accepted ADRs are never deleted; mark superseded/deprecated")
             continue
         for p in current[num]:
             rel = p.relative_to(root).as_posix()
             new_text = p.read_text(encoding="utf-8")
             new_st = _status_of(new_text)
             if new_st not in IMMUTABLE_NEXT[old_st]:
-                errors.append(f"{rel}: status de ADR-{num} regrediu de '{old_st}' {where} para "
-                              f"'{new_st}' — permitido: {sorted(IMMUTABLE_NEXT[old_st])}")
+                errors.append(f"{rel}: ADR-{num} status regressed from '{old_st}' {where} to "
+                              f"'{new_st}' — allowed: {sorted(IMMUTABLE_NEXT[old_st])}")
             old_block = split_current_truth(_body_without_frontmatter(old_text))[1]
             new_block = split_current_truth(_body_without_frontmatter(new_text))[1]
             if len(new_block) > VA_MAX_LINES and new_block != old_block:
-                errors.append(f"{rel}: bloco VERDADE ATUAL de ADR-{num} com {len(new_block)} "
-                              f"linhas — máximo {VA_MAX_LINES} (STANDARD §5.1); bloco antigo "
-                              "maior só é tolerado enquanto não for editado")
+                errors.append(f"{rel}: CURRENT TRUTH / VERDADE ATUAL block of ADR-{num} has "
+                              f"{len(new_block)} lines — max {VA_MAX_LINES} (STANDARD §5.1); "
+                              "legacy longer blocks are tolerated only while untouched")
             if normalized_adr_body(old_text) != normalized_adr_body(new_text):
-                moved = f" (renomeado de {old_path})" if rel != old_path else ""
-                errors.append(f"{rel}: ADR com status '{old_st}' {where} teve corpo "
-                              f"alterado{moved} — crie novo ADR que supersede; só frontmatter e "
-                              "o bloco VERDADE ATUAL do topo podem mudar")
+                moved = f" (renamed from {old_path})" if rel != old_path else ""
+                errors.append(f"{rel}: ADR with status '{old_st}' {where} had its body "
+                              f"modified{moved} — create a new ADR that supersedes it; only "
+                              "frontmatter and the top CURRENT TRUTH block may change")
 
 
 def tree_files(root):
-    """Arquivos sujeitos à higiene, com '/' como separador. Em repo git: versionados + não
-    versionados que o .gitignore não exclui — o que poderia entrar num commit (um .DS_Store
-    ignorado não bloqueia ninguém). Fora de git: varredura com IGNORED_DIRS."""
+    """Files subject to tree hygiene, using '/' separators. In a git repo: tracked + non-ignored
+    untracked files (an ignored .DS_Store never blocks commits). Outside git: os.walk."""
     r = _git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
     if r.returncode == 0:
         return sorted({p for p in r.stdout.split("\0")
@@ -468,23 +489,22 @@ def tree_files(root):
 
 
 def materialize_index(root):
-    """Snapshot do INDEX — o que vai entrar no commit, não a working tree —, lido da ÁRVORE
-    que o commit gravaria (`git write-tree`): entrada `add -N` não entra, conflito não
-    resolvido para, sparse-checkout/skip-worktree não atrapalham, nome não-UTF-8 passa. Só o
-    router e docs/ ganham conteúdo (symlink resolvido pela própria árvore); os demais paths
-    seguem só como NOMES (higiene, implemented-by) — o custo não cresce com o repo.
-    Retorna (diretório temporário, conjunto de paths do index)."""
+    """Snapshot of the git INDEX — what will actually enter the commit, not the working tree —
+    read from the tree `git write-tree` would record: `git add -N` entries are excluded,
+    unmerged conflicts abort cleanly, sparse-checkout/skip-worktree do not interfere, and
+    non-UTF-8 filenames pass. Only AGENTS.md and docs/ materialize file contents (symlinks
+    resolved inside the tree); remaining paths travel as NAMES only (hygiene, implemented-by)."""
     top = _git(root, ["rev-parse", "--show-toplevel"])
     if top.returncode != 0:
-        sys.exit("docs-check --staged: fora de um repositório git")
+        sys.exit("docs-check --staged: not inside a git repository")
     root = Path(top.stdout.strip())
     wt = _git(root, ["write-tree"])
     if wt.returncode != 0:
-        sys.exit("docs-check --staged: o index não vira árvore (conflito não resolvido?) — "
+        sys.exit("docs-check --staged: index cannot form a tree (unmerged conflict?) — "
                  + wt.stderr.strip())
     ls = subprocess.run(["git", "ls-tree", "-r", "-z", "--full-tree", wt.stdout.strip()],
                         cwd=root, capture_output=True)
-    entries = {}  # path (bytes) → (modo, tipo, sha)
+    entries = {}  # path (bytes) → (mode, kind, sha)
     for rec in ls.stdout.split(b"\0"):
         if rec:
             meta, _, path = rec.partition(b"\t")
@@ -495,7 +515,7 @@ def materialize_index(root):
                                       if entries[p][1] == b"blob"}), raw=True)
 
     def content(path):
-        for _ in range(8):  # symlink → alvo dentro da árvore; alvo fora dela = link quebrado
+        for _ in range(8):  # symlink → target inside tree; target outside = broken link
             mode, kind, sha = entries.get(path, (None, None, None))
             if kind != b"blob":
                 return None
@@ -517,7 +537,7 @@ def materialize_index(root):
 
 
 def main():
-    # Windows usa cp1252 no stdout redirecionado; mensagens têm não-ASCII ("·", "—").
+    # Windows defaults to cp1252 on redirected stdout; output contains non-ASCII ("·", "—").
     for s in (sys.stdout, sys.stderr):
         if hasattr(s, "reconfigure"):
             s.reconfigure(encoding="utf-8", errors="replace")
@@ -525,15 +545,15 @@ def main():
     ap.add_argument("--root", default=".")
     ap.add_argument("--emit-index", action="store_true")
     ap.add_argument("--warn-only", action="store_true",
-                    help="imprime erros mas sai 0 (janela de adoção, STANDARD §10)")
+                    help="print errors but exit 0 (adoption window, STANDARD §10)")
     ap.add_argument("--check-adr-immutability", action="store_true",
-                    help="compara ADRs modificados contra --base-ref e bloqueia qualquer emenda de corpo")
+                    help="compare modified ADRs against --base-ref and block any body amendment")
     ap.add_argument("--base-ref", default=os.environ.get("CASA_BASE_REF", "origin/main"))
     ap.add_argument("--staged", action="store_true",
-                    help="valida o conteúdo do index (o que entra no commit) — modo do pre-commit")
+                    help="validate git index contents (what enters the commit) — pre-commit mode")
     args = ap.parse_args()
     if args.staged and (args.emit_index or args.check_adr_immutability):
-        ap.error("--staged não combina com --emit-index nem --check-adr-immutability")
+        ap.error("--staged cannot be combined with --emit-index or --check-adr-immutability")
     root = Path(args.root)
     staged_tmp = index_names = None
     if args.staged:
@@ -547,8 +567,8 @@ def main():
 
 
 def run_checks(args, root, index_names=None):
-    """index_names: no modo --staged, os paths do index — higiene e implemented-by olham os
-    NOMES, sem arquivo vazio por path no disco."""
+    """index_names: in --staged mode, the set of indexed paths — hygiene and implemented-by
+    inspect path NAMES directly without creating empty files on disk."""
     errors, warnings, docs = [], [], {}
     index_dirs = set()
     for n in index_names or ():
@@ -565,7 +585,7 @@ def run_checks(args, root, index_names=None):
     validate_router(root, errors, warnings)
     check_backlog_location(root, warnings)
 
-    # Coleta, derivação e validação por documento
+    # Collect, derive, and validate each document
     for layer, prefix in LAYERS.items():
         folder = root / "docs" / layer
         if not folder.exists():
@@ -576,45 +596,45 @@ def run_checks(args, root, index_names=None):
             rel = path.relative_to(root).as_posix()
             m = FILENAME_RE.match(path.name)
             if not m:
-                errors.append(f"{rel}: filename fora do padrão NNNN-kebab.md (id é derivado dele)")
+                errors.append(f"{rel}: filename does not match NNNN-kebab.md (id is derived from it)")
                 continue
             did = f"{prefix}-{m.group(1)}"
             text = path.read_text(encoding="utf-8")
             raw_fm, body = split_frontmatter(text)
             if raw_fm is None:
-                errors.append(f"{rel}: sem frontmatter")
+                errors.append(f"{rel}: missing frontmatter")
                 continue
             fm, fm_errs = parse_frontmatter(raw_fm)
             errors.extend(f"{did}: {e}" for e in fm_errs)
             for k in fm:
                 if k not in KNOWN_KEYS:
-                    warnings.append(f"{did}: campo de frontmatter fora do vocabulário: '{k}' "
-                                    "— registre a extensão num ADR do repo ou remova (STANDARD §6)")
+                    warnings.append(f"{did}: unknown frontmatter field '{k}' — register the "
+                                    "extension in a repo ADR or remove it (STANDARD §6)")
             visible = re.sub(r"<!--.*?-->", "", body, flags=re.S)
             title = first_h1(visible)
             if not title:
-                errors.append(f"{did}: sem H1 no corpo (title é derivado dele)")
+                errors.append(f"{did}: missing H1 in body (title is derived from it)")
             for k in sorted(REQUIRED):
                 if isinstance(fm.get(k), list):
-                    errors.append(f"{did}: {k} deve ser escalar, não lista")
+                    errors.append(f"{did}: {k} must be scalar, not a list")
                     fm[k] = None
             missing = REQUIRED - {k for k, v in fm.items() if present(v)}
             if missing:
-                errors.append(f"{did}: campos obrigatórios ausentes: {sorted(missing)}")
+                errors.append(f"{did}: missing required fields: {sorted(missing)}")
             st = fm.get("status")
             if st and st not in STATUS_VOCAB[layer]:
-                errors.append(f"{did}: status inválido '{st}' (válidos: {sorted(STATUS_VOCAB[layer])})")
+                errors.append(f"{did}: invalid status '{st}' (valid: {sorted(STATUS_VOCAB[layer])})")
             dt = fm.get("date")
             if dt:
                 try:
                     datetime.strptime(str(dt), "%Y-%m-%d")
                 except ValueError:
-                    errors.append(f"{did}: date '{dt}' inválida (data de calendário AAAA-MM-DD)")
+                    errors.append(f"{did}: invalid date '{dt}' (calendar date YYYY-MM-DD)")
             if did in docs:
-                errors.append(f"{rel}: id derivado duplicado '{did}' (também em {docs[did]['path']})")
+                errors.append(f"{rel}: duplicate derived id '{did}' (also in {docs[did]['path']})")
                 continue
             ib = fm.get("implemented-by") or []
-            # as_posix: no Windows str(Path) usa "\", divergindo do índice gerado no CI
+            # as_posix: on Windows str(Path) uses "\", diverging from CI-generated indices
             docs[did] = {"id": did, "path": path.relative_to(root).as_posix(), "layer": layer,
                          "title": title, "status": st,
                          "builds-on": fm.get("builds-on") or [],
@@ -622,89 +642,88 @@ def run_checks(args, root, index_names=None):
                          "implemented-by": ib if isinstance(ib, list) else [ib],
                          "_visible": visible}
             if fm.get("design-ref"):
-                # exportado ao índice: campo conhecido presente no grafo, não fantasma (ADR-0014)
+                # exported to index: known graph field, never a phantom key (ADR-0014)
                 docs[did]["design-ref"] = fm.get("design-ref")
 
-    # Grafo e regras por camada
+    # Causal graph and layer-specific invariants
     for d in docs.values():
         bo = d["builds-on"]
         if not isinstance(bo, list):
-            errors.append(f"{d['id']}: builds-on deve ser lista")
+            errors.append(f"{d['id']}: builds-on must be a list")
             bo = [bo]
         for ref in bo:
             if ":" in ref:
-                warnings.append(f"{d['id']}: referência cross-repo '{ref}' (não verificada localmente)")
+                warnings.append(f"{d['id']}: cross-repo reference '{ref}' (not verified locally)")
             elif ref == d["id"]:
-                # aviso na janela da 1.9 (proibição nova): vira erro numa versão futura
-                warnings.append(f"{d['id']}: builds-on aponta para o próprio doc")
+                warnings.append(f"{d['id']}: builds-on points to the document itself")
             elif ref not in docs:
-                errors.append(f"{d['id']}: builds-on aponta para doc inexistente '{ref}'")
+                errors.append(f"{d['id']}: builds-on points to non-existent doc '{ref}'")
         sb = d["superseded-by"]
         if sb:
             if d["layer"] != "adr":
-                errors.append(f"{d['id']}: superseded-by é campo de ADR (specs usam status 'deprecated')")
+                errors.append(f"{d['id']}: superseded-by is an ADR-only field (specs use status 'deprecated')")
             elif isinstance(sb, list):
-                errors.append(f"{d['id']}: superseded-by deve ser escalar, não lista")
+                errors.append(f"{d['id']}: superseded-by must be scalar, not a list")
             elif ":" in sb:
-                warnings.append(f"{d['id']}: superseded-by cross-repo '{sb}' (não verificado localmente)")
+                warnings.append(f"{d['id']}: cross-repo superseded-by '{sb}' (not verified locally)")
             elif sb == d["id"]:
-                errors.append(f"{d['id']}: superseded-by aponta para o próprio ADR")
+                errors.append(f"{d['id']}: superseded-by points to the ADR itself")
             elif sb not in docs:
-                errors.append(f"{d['id']}: superseded-by inexistente '{sb}'")
+                errors.append(f"{d['id']}: non-existent superseded-by target '{sb}'")
             elif docs[sb]["layer"] != "adr":
-                errors.append(f"{d['id']}: superseded-by '{sb}' não é um ADR")
+                errors.append(f"{d['id']}: superseded-by '{sb}' is not an ADR")
             if d["layer"] == "adr" and d["status"] != "superseded":
-                errors.append(f"{d['id']}: tem superseded-by mas status != superseded")
+                errors.append(f"{d['id']}: has superseded-by set while status != superseded")
         if d["layer"] == "adr" and d["status"] == "superseded":
             if not sb:
-                errors.append(f"{d['id']}: superseded sem superseded-by")
+                errors.append(f"{d['id']}: status is superseded without superseded-by")
             if not VA_RE.search(d["_visible"]):
-                errors.append(f"{d['id']}: ADR superado sem bloco '> VERDADE ATUAL' real "
-                              "(comentário do template não conta)")
+                errors.append(f"{d['id']}: superseded ADR missing real '> CURRENT TRUTH' "
+                              "(or '> VERDADE ATUAL') callout (template comments do not count)")
             else:
                 block = split_current_truth(d["_visible"])[1]
                 if len(block) > VA_MAX_LINES:
-                    warnings.append(f"{d['id']}: bloco VERDADE ATUAL com {len(block)} linhas "
-                                    f"(máximo {VA_MAX_LINES}, no topo — STANDARD §5.1); ao "
-                                    "editá-lo, reduza — o lint de imutabilidade cobra")
+                    warnings.append(f"{d['id']}: CURRENT TRUTH / VERDADE ATUAL block has "
+                                    f"{len(block)} lines (max {VA_MAX_LINES}, at top — STANDARD §5.1); "
+                                    "reduce it when next edited — immutability lint enforces the cap")
         if d["layer"] == "specs":
             if d["status"] in ("accepted", "implemented"):
-                open_questions = section_body(d["_visible"], "Questões em aberto")
+                open_questions = section_body_any(d["_visible"], SPEC_OPEN_QUESTIONS_HEADINGS)
                 if open_questions is None:
-                    errors.append(f"{d['id']}: sem seção '## Questões em aberto'")
+                    errors.append(f"{d['id']}: missing '## Open questions' section")
                 elif re.search(r"(?m)^\s*[-*]\s+\[\s\]", open_questions):
-                    errors.append(f"{d['id']}: questões em aberto com checkbox pendente — "
-                                  "não pode sair de draft sem decidir ou remover o bloqueio")
+                    errors.append(f"{d['id']}: open questions still have unchecked items — "
+                                  "cannot leave draft without deciding or removing the blocker")
 
                 dod = section_body(d["_visible"], "Definition of Done")
                 if dod is None:
-                    errors.append(f"{d['id']}: sem '## Definition of Done' — obrigatório para sair de draft")
+                    errors.append(f"{d['id']}: missing '## Definition of Done' — required to leave draft")
                 else:
                     if has_placeholder(dod):
-                        errors.append(f"{d['id']}: Definition of Done contém placeholder — "
-                                      "declare comandos reais e critério binário")
+                        errors.append(f"{d['id']}: Definition of Done contains a placeholder — "
+                                      "declare real commands and binary pass criteria")
                     if not executable_lines(dod):
-                        errors.append(f"{d['id']}: Definition of Done sem comando executável "
-                                      "em bloco de código")
+                        errors.append(f"{d['id']}: Definition of Done has no executable command "
+                                      "in a code block")
             if d["status"] == "implemented":
                 if not d["implemented-by"]:
-                    errors.append(f"{d['id']}: implemented sem implemented-by")
+                    errors.append(f"{d['id']}: implemented without implemented-by")
                 for ref in d["implemented-by"]:
                     if has_placeholder(str(ref)):
-                        errors.append(f"{d['id']}: implemented-by contém placeholder '{ref}'")
+                        errors.append(f"{d['id']}: implemented-by contains placeholder '{ref}'")
                     elif not path_exists(str(ref)):
-                        errors.append(f"{d['id']}: implemented-by aponta para path inexistente '{ref}'")
-                verif = section_body(d["_visible"], "Verificação")
+                        errors.append(f"{d['id']}: implemented-by points to non-existent path '{ref}'")
+                verif = section_body_any(d["_visible"], SPEC_VERIFICATION_HEADINGS)
                 if verif is None:
-                    errors.append(f"{d['id']}: implemented sem seção '## Verificação'")
-                elif PLACEHOLDER in verif:
-                    errors.append(f"{d['id']}: ## Verificação ainda com placeholder — "
-                                  "preencha a evidência do DoD")
+                    errors.append(f"{d['id']}: implemented without '## Verification' section")
+                elif any(ph in verif for ph in VERIFICATION_PLACEHOLDERS):
+                    errors.append(f"{d['id']}: ## Verification still contains template placeholder — "
+                                  "record actual DoD evidence")
                 elif not [ln for ln in verif.splitlines()
                           if ln.strip() and not ln.strip().startswith("```")]:
-                    errors.append(f"{d['id']}: ## Verificação sem evidência textual do DoD")
+                    errors.append(f"{d['id']}: ## Verification has no textual DoD evidence")
 
-    # Higiene de árvore: o que o git versiona ou versionaria (repo inteiro)
+    # Tree hygiene: files git tracks or would track across the whole repository
     if index_names is not None:
         files = sorted(n for n in index_names if not IGNORED_DIRS.intersection(n.split("/")[:-1]))
     else:
@@ -713,16 +732,16 @@ def run_checks(args, root, index_names=None):
     for rel in files:
         fn = rel.rsplit("/", 1)[-1]
         if any(re.search(pat, fn) for pat in TRASH_ALWAYS):
-            errors.append(f"higiene: arquivo proibido na árvore: {rel}")
+            errors.append(f"hygiene: forbidden file in tree: {rel}")
             continue
         m = DUP_RE.match(fn)
         if m:
             parent = rel[:-len(fn)]
             if parent + m.group("base") + m.group("ext") in present_files:
-                errors.append(f"higiene: provável duplicado de sync: {rel} "
-                              f"(o original '{m.group('base')}{m.group('ext')}' existe ao lado)")
+                errors.append(f"hygiene: probable sync duplicate: {rel} "
+                              f"(original '{m.group('base')}{m.group('ext')}' exists alongside it)")
 
-    # Índices: gerar em memória; --emit-index escreve, senão compara (frescor)
+    # Indices: build in memory; --emit-index writes, otherwise verify freshness
     index = [{k: v for k, v in d.items() if not k.startswith("_")} for d in docs.values()]
     index.sort(key=lambda d: d["id"])
     index_text = json.dumps(index, indent=2, ensure_ascii=False) + "\n"
@@ -738,28 +757,28 @@ def run_checks(args, root, index_names=None):
         (root / "docs" / "index.json").write_text(index_text, encoding="utf-8")
         for p, content in readmes.items():
             p.write_text(content, encoding="utf-8")
-        print(f"READMEs e index.json gerados ({len(index)} docs).")
+        print(f"Generated READMEs and index.json ({len(index)} docs).")
     else:
         for p, content in readmes.items():
             rel = p.relative_to(root)
             has_rows = content.count("\n") > 6
             if not p.exists():
                 if has_rows:
-                    errors.append(f"índices: {rel} ausente — rode scripts/docs-check --emit-index")
+                    errors.append(f"indices: {rel} missing — run scripts/docs-check --emit-index")
             elif p.read_text(encoding="utf-8") != content:
-                errors.append(f"índices: {rel} divergente do gerado — rode scripts/docs-check --emit-index")
+                errors.append(f"indices: {rel} out of date — run scripts/docs-check --emit-index")
         ij = root / "docs" / "index.json"
         if ij.exists() and ij.read_text(encoding="utf-8") != index_text:
-            errors.append("índices: docs/index.json divergente — rode scripts/docs-check --emit-index")
+            errors.append("indices: docs/index.json out of date — run scripts/docs-check --emit-index")
 
     if args.check_adr_immutability:
         check_adr_immutability(root, args.base_ref, errors)
 
     for w in warnings:
-        print(f"AVISO: {w}")
+        print(f"WARNING: {w}")
     for e in errors:
-        print(f"ERRO:  {e}")
-    print(f"\n{len(docs)} docs · {len(errors)} erro(s) · {len(warnings)} aviso(s)")
+        print(f"ERROR:   {e}")
+    print(f"\n{len(docs)} docs · {len(errors)} error(s) · {len(warnings)} warning(s)")
     sys.exit(0 if (args.warn_only or not errors) else 1)
 
 

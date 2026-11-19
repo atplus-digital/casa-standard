@@ -1,31 +1,31 @@
-<!-- Capítulo de contexto RECONHECIDO pelo CASA (STANDARD §4/§8).
-     Copie para docs/context/TESTS.md e aponte no Mapa de contexto do AGENTS.md:
-       | `docs/context/TESTS.md` | ao alterar teste, DoD, bugfix ou comportamento crítico |
-     Conteúdo IMPERATIVO e ATEMPORAL ("rode X", "NUNCA Y", "o estado atual é Z").
-     Quando este capítulo é DECLARADO no router, o docs-check exige ao menos UM comando
-     canônico em bloco de código — liste o comando real do repo, não prosa. Convenção de
-     teste compartilhada APONTA para ADR/Spec quando existir; não copia o corpo (§4). -->
+<!-- RECOGNIZED context chapter in CASA (STANDARD §4/§8).
+     Copy to docs/context/TESTS.md and add a pointer in AGENTS.md's Context map:
+       | `docs/context/TESTS.md` | when touching tests, DoD, bugfixes, or critical behavior |
+     Content is IMPERATIVE and TIMELESS ("run X", "NEVER Y", "current state is Z").
+     When this chapter is DECLARED in the router, docs-check requires at least ONE canonical
+     command inside a fenced code block — list the repo's real command, not prose. Shared
+     testing conventions POINT to an ADR/Spec when one exists rather than copying its body (§4). -->
 
-# Testes
+# Tests
 
-## Comandos canônicos
-<!-- O(s) comando(s) que rodam a suíte. É o que o docs-check exige existir. -->
+## Canonical commands
+<!-- The command(s) that run the suite. Required by docs-check when declared. -->
 
 ```bash
-npm test                 # substitua pelo comando real do repo (pytest -q, deno test, …)
+npm test                 # replace with the repo's real command (pytest -q, deno test, …)
 ```
 
-## Tipos de teste usados neste repo
-<!-- Quais existem (unit/integração/e2e) e o que cada um cobre. Omita o que não usa. -->
+## Test types used in this repo
+<!-- Which layers exist (unit/integration/e2e) and what each covers. Omit unused ones. -->
 
-## Onde criar teste novo
-<!-- Diretório e convenção de nome por tipo (ex.: `tests/unit/<modulo>.test.ts`). -->
+## Where to add new tests
+<!-- Directory and naming convention per test type (e.g., `tests/unit/<module>.test.ts`). -->
 
-## Como testar bugfix
-<!-- Regra: bug reproduzido vira teste de regressão ANTES do fix. Onde/como. -->
+## How to test a bugfix
+<!-- Rule: reproduce the bug in a regression test BEFORE applying the fix. Where/how. -->
 
-## O que conta como regressão
-<!-- Quando um teste novo é obrigatório vs. opcional. -->
+## What counts as a regression
+<!-- When a new test is mandatory vs. optional. -->
 
-## O que NÃO testar
-<!-- Fronteiras: o que é caro/frágil demais e fica fora de propósito. -->
+## What NOT to test
+<!-- Boundaries: what is too brittle or costly and intentionally left out. -->

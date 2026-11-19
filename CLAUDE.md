@@ -2,8 +2,8 @@
 
 @AGENTS.md
 
-<!-- Ponte para o Claude Code (casa-standard ADR-0009): o router canônico deste repo é o
-     AGENTS.md — edite lá. O @import acima carrega o router inteiro no launch, que é a
-     semântica de router (carga-sempre); a proibição de @import do STANDARD §4 vale para
-     capítulos de contexto, não para esta ponte. Instruções específicas do Claude Code,
-     se necessárias, entram abaixo desta linha. -->
+<!-- Host shim for Claude Code (casa-standard ADR-0009): the canonical router for this
+     repo is AGENTS.md — edit there. The @import above loads the entire router at launch,
+     matching router semantics (always-loaded); the STANDARD §4 ban on @import applies to
+     context chapters, not to this shim. Claude Code-specific instructions, if needed,
+     go below this comment. -->

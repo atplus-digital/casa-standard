@@ -214,6 +214,20 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0019",
+    "path": "docs/adr/0019-adopt-english-as-canonical-product-language-with-bilingual-toolchain-compatibility-and-bilingual-site.md",
+    "layer": "adr",
+    "title": "Adopt English as canonical product language with bilingual toolchain compatibility and bilingual site",
+    "status": "accepted",
+    "builds-on": [
+      "ADR-0007",
+      "ADR-0010",
+      "ADR-0018"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -433,6 +447,64 @@
       "site/favicon.svg",
       ".github/workflows/pages.yml",
       ".github/workflows/docs-check.yml"
+    ]
+  },
+  {
+    "id": "SPEC-0012",
+    "path": "docs/specs/0012-bilingual-casa-1-11-toolchain-compatibility-and-en-pt-br-static-site-generation.md",
+    "layer": "specs",
+    "title": "Bilingual CASA 1.11 toolchain compatibility and EN/PT-BR static site generation",
+    "status": "implemented",
+    "builds-on": [
+      "ADR-0007",
+      "ADR-0013",
+      "ADR-0018",
+      "ADR-0019"
+    ],
+    "superseded-by": null,
+    "implemented-by": [
+      "STANDARD.md",
+      "README.md",
+      "CHANGELOG.md",
+      "CONTRIBUTING.md",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "docs/BACKLOG.md",
+      "docs/templates/AGENTS.template.md",
+      "docs/templates/CLAUDE.template.md",
+      "docs/templates/adr.template.md",
+      "docs/templates/spec.template.md",
+      "docs/templates/context.TESTS.template.md",
+      "docs/templates/docs-check.workflow.yml",
+      "docs/templates/casa-update-check.workflow.yml",
+      "docs/templates/skills/casa-explore/SKILL.md",
+      "docs/templates/skills/casa-propose/SKILL.md",
+      "docs/templates/skills/casa-apply/SKILL.md",
+      "docs/templates/skills/casa-verify/SKILL.md",
+      "docs/templates/skills/casa-close/SKILL.md",
+      "install.sh",
+      "scripts/docs-check",
+      "scripts/casa-init",
+      "scripts/docs-reserve",
+      "scripts/casa-update-check",
+      "scripts/pre-commit",
+      "scripts/build-site",
+      "scripts/test-docs-check",
+      "scripts/test-casa-init",
+      "scripts/test-docs-reserve",
+      "scripts/test-update-check",
+      "scripts/test-install",
+      "scripts/test-site",
+      "site/style.css",
+      "site/app.js",
+      "site/i18n/en/docs.json",
+      "site/i18n/pt/STANDARD.md",
+      "site/i18n/pt/CHANGELOG.md",
+      "site/i18n/pt/skills.json",
+      "site/i18n/pt/pillars.json",
+      "site/i18n/pt/docs.json",
+      ".github/workflows/docs-check.yml",
+      ".github/workflows/pages.yml"
     ]
   }
 ]

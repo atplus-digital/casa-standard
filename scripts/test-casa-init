@@ -1,188 +1,185 @@
 #!/usr/bin/env bash
-# Cenários das SPEC-0001, 0009 e 0010 (casa-init). DoD: exit 0 = todos verdes.
-# Roda local e no CI; sem dependências além de git, python3 e coreutils.
+# Scenarios for SPEC-0001, 0009, 0010, and 0012 (casa-init). DoD: exit 0 = all green.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INIT="$ROOT/scripts/casa-init"
-# Versões derivadas das constantes (nunca hardcodadas): todo bump toca só os scripts.
+# Versions derived dynamically from constants (never hardcoded).
 CASA_V="$(sed -n 's/^CASA_VERSION = "\(.*\)"$/\1/p' "$INIT")"
 DC_V="$(sed -n 's/^CONTRACT_VERSION = "\(.*\)"$/\1/p' "$ROOT/scripts/docs-check")"
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 tree_hash() { (cd "$1" && find . -type f | LC_ALL=C sort | xargs cat | cksum); }
 
-# EARS 1, 11, 10 — greenfield (cria destino), repo-id explícito, idempotência
+# EARS 1, 11, 10 — greenfield, explicit repo-id, idempotency
 A="$(mktemp -d)/novo"
 python3 "$INIT" "$A" --repo-id meu-app >/dev/null
-ck "EARS-1/11: router criado com repo-id"            'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
-ck "router criado com casa-version"                  'grep -q "casa-version: $CASA_V" "$A/AGENTS.md"'
-ck "ADR-0010: constantes casa-init/docs-check iguais" '[ -n "$CASA_V" ] && [ "$CASA_V" = "$DC_V" ]'
-ck "ref carimbado (placeholder substituído)"         'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
-ck "docs-check verde no destino recém-criado"        '(cd "$A" && python3 scripts/docs-check)'
-ck "SPEC-0005/1: ponte CLAUDE.md criada com @AGENTS.md" 'grep -q "^@AGENTS.md" "$A/CLAUDE.md"'
+ck "EARS-1/11: router created with repo-id"          'grep -q "casa-repo-id: meu-app" "$A/AGENTS.md"'
+ck "router created with casa-version"                'grep -q "casa-version: $CASA_V" "$A/AGENTS.md"'
+ck "ADR-0010: casa-init/docs-check versions match"   '[ -n "$CASA_V" ] && [ "$CASA_V" = "$DC_V" ]'
+ck "ref stamped (placeholder replaced)"              'grep -q "^casa-standard-ref: " "$A/AGENTS.md" && ! grep -q "<sha>" "$A/AGENTS.md"'
+ck "docs-check green on freshly initialized target"  '(cd "$A" && python3 scripts/docs-check)'
+ck "SPEC-0005/1: CLAUDE.md shim created with @AGENTS.md" 'grep -q "^@AGENTS.md" "$A/CLAUDE.md"'
+ck "SPEC-0012/10: site/ and site/i18n/ never copied to adopter" '[ ! -e "$A/site" ] && [ ! -e "$A/scripts/build-site" ] && [ ! -e "$A/scripts/test-site" ]'
 H1=$(tree_hash "$A"); python3 "$INIT" "$A" --repo-id meu-app >/dev/null; H2=$(tree_hash "$A")
-ck "EARS-10: segunda execução não muda nenhum byte"  '[ "$H1" = "$H2" ]'
+ck "EARS-10: second execution changes zero bytes"    '[ "$H1" = "$H2" ]'
 
-# EARS 3 — router existente é do repo
-B="$(mktemp -d)/r"; mkdir -p "$B"; printf 'meu router\n' > "$B/AGENTS.md"
+# EARS 3 — existing router belongs to repo
+B="$(mktemp -d)/r"; mkdir -p "$B"; printf 'my custom router\n' > "$B/AGENTS.md"
 python3 "$INIT" "$B" >/dev/null
-ck "EARS-3: AGENTS.md existente preservado"          '[ "$(cat "$B/AGENTS.md")" = "meu router" ]'
+ck "EARS-3: existing AGENTS.md preserved"            '[ "$(cat "$B/AGENTS.md")" = "my custom router" ]'
 
-# Router antigo com bloco yaml recebe metadados tool-owned sem perder conteúdo
+# Legacy router with yaml block receives tool-owned metadata without losing content
 BV="$(mktemp -d)/rv"; mkdir -p "$BV"; cat > "$BV/AGENTS.md" <<'EOF'
 # AGENTS.md
 ```yaml
 casa-repo-id: velho
 casa-tier: T1
 ```
-conteúdo do repo
+repo content
 EOF
 python3 "$INIT" "$BV" >/dev/null
-ck "router antigo sem casa-version a recebe"         'grep -q "casa-version: $CASA_V" "$BV/AGENTS.md"'
-ck "router antigo recebe casa-standard-ref"          'grep -q "^casa-standard-ref: " "$BV/AGENTS.md"'
-ck "router antigo preserva conteúdo do repo"         'grep -q "conteúdo do repo" "$BV/AGENTS.md"'
+ck "legacy router without casa-version receives it"  'grep -q "casa-version: $CASA_V" "$BV/AGENTS.md"'
+ck "legacy router receives casa-standard-ref"        'grep -q "^casa-standard-ref: " "$BV/AGENTS.md"'
+ck "legacy router preserves repo content"            'grep -q "repo content" "$BV/AGENTS.md"'
 
-# ADR-0010 — casa-version existente é PROMESSA do repo: nunca alterada; ref é da ferramenta
+# ADR-0010 — existing casa-version is repo's PROMISE: never altered; ref is tool-owned
 PV="$(mktemp -d)/pv"; mkdir -p "$PV"; cat > "$PV/AGENTS.md" <<'EOF'
 # AGENTS.md
 ```yaml
 casa-repo-id: velho
 casa-tier: T1
 casa-version: 0.9
-casa-standard-ref: ref-antiga
+casa-standard-ref: old-ref
 ```
-conteúdo do repo
+repo content
 EOF
 python3 "$INIT" "$PV" >/dev/null
-ck "ADR-0010: casa-version existente não é alterada" 'grep -q "casa-version: 0.9" "$PV/AGENTS.md"'
-ck "ADR-0010: casa-standard-ref é atualizado"        '! grep -q "casa-standard-ref: ref-antiga" "$PV/AGENTS.md"'
+ck "ADR-0010: existing casa-version is never altered" 'grep -q "casa-version: 0.9" "$PV/AGENTS.md"'
+ck "ADR-0010: casa-standard-ref is updated"           '! grep -q "casa-standard-ref: old-ref" "$PV/AGENTS.md"'
 
-# SPEC-0005/2,3 — ponte CLAUDE.md existente é identidade do repo
-CS="$(mktemp -d)/shim-ok"; mkdir -p "$CS"; printf '@AGENTS.md\nregras minhas\n' > "$CS/CLAUDE.md"
+# SPEC-0005/2,3 — existing CLAUDE.md shim belongs to repo identity
+CS="$(mktemp -d)/shim-ok"; mkdir -p "$CS"; printf '@AGENTS.md\nmy rules\n' > "$CS/CLAUDE.md"
 OUT=$(python3 "$INIT" "$CS" 2>&1)
-ck "SPEC-0005/2: CLAUDE.md com @AGENTS.md intocado"  '[ "$(cat "$CS/CLAUDE.md")" = "@AGENTS.md
-regras minhas" ]'
-ck "SPEC-0005/2: e relatado em dia"                  'echo "$OUT" | grep -q "em dia.*CLAUDE.md"'
-CA="$(mktemp -d)/shim-alheio"; mkdir -p "$CA"; printf 'instrucoes custom\n' > "$CA/CLAUDE.md"
+ck "SPEC-0005/2: CLAUDE.md with @AGENTS.md untouched" '[ "$(cat "$CS/CLAUDE.md")" = "@AGENTS.md
+my rules" ]'
+ck "SPEC-0005/2: and reported up to date"            'echo "$OUT" | grep -q "up to date.*CLAUDE.md"'
+CA="$(mktemp -d)/shim-foreign"; mkdir -p "$CA"; printf 'custom instructions\n' > "$CA/CLAUDE.md"
 OUT=$(python3 "$INIT" "$CA" 2>&1)
-ck "SPEC-0005/3: CLAUDE.md sem @AGENTS.md preservado" '[ "$(cat "$CA/CLAUDE.md")" = "instrucoes custom" ]'
-ck "SPEC-0005/3: e gera AVISO com a linha a adicionar" 'echo "$OUT" | grep -q "AVISO.*CLAUDE.md.*@AGENTS.md"'
+ck "SPEC-0005/3: CLAUDE.md without @AGENTS.md preserved" '[ "$(cat "$CA/CLAUDE.md")" = "custom instructions" ]'
+ck "SPEC-0005/3: and emits WARNING with line to add" 'echo "$OUT" | grep -q "WARNING.*CLAUDE.md.*@AGENTS.md"'
 
-# EARS 4 — toolchain desatualizada é da ferramenta
+# EARS 4 — outdated toolchain is overwritten
 C="$(mktemp -d)/u"; python3 "$INIT" "$C" >/dev/null
-printf '# versao velha\n' > "$C/scripts/docs-check"
+printf '# old version\n' > "$C/scripts/docs-check"
 OUT=$(python3 "$INIT" "$C" 2>&1)
-ck "EARS-4: toolchain divergente é sobrescrita"      'cmp -s "$ROOT/scripts/docs-check" "$C/scripts/docs-check"'
-ck "EARS-4: e relatada como atualizada"              'echo "$OUT" | grep -q "atualizado.*scripts/docs-check"'
+ck "EARS-4: divergent toolchain overwritten"         'cmp -s "$ROOT/scripts/docs-check" "$C/scripts/docs-check"'
+ck "EARS-4: and reported as updated"                 'echo "$OUT" | grep -q "updated.*scripts/docs-check"'
 
-# EARS 6 — git sem remote → hook
+# EARS 6 — git without remote → hook
 D="$(mktemp -d)/g"; mkdir -p "$D"; git init -q "$D"
 python3 "$INIT" "$D" >/dev/null
-ck "EARS-6: pre-commit hook instalado sem remote"    '[ -e "$D/.git/hooks/pre-commit" ]'
+ck "EARS-6: pre-commit hook installed without remote" '[ -e "$D/.git/hooks/pre-commit" ]'
 
-# EARS 7 — git com remote GitHub → workflows, sem hook (URL scp-like cobre esse parser)
+# EARS 7 — git with GitHub remote → workflows, no hook
 E="$(mktemp -d)/h"; mkdir -p "$E"; git init -q "$E"; git -C "$E" remote add origin git@github.com:org/x.git
 python3 "$INIT" "$E" >/dev/null
-ck "EARS-7: workflow de CI criado com remote GitHub" '[ -f "$E/.github/workflows/docs-check.yml" ]'
-ck "EARS-7: hook não instalado com remote GitHub"    '[ ! -e "$E/.git/hooks/pre-commit" ]'
-ck "SPEC-0008/7: update-check criado com remote GitHub" '[ -f "$E/.github/workflows/casa-update-check.yml" ]'
+ck "EARS-7: CI workflow created with GitHub remote"  '[ -f "$E/.github/workflows/docs-check.yml" ]'
+ck "EARS-7: hook not installed with GitHub remote"   '[ ! -e "$E/.git/hooks/pre-commit" ]'
+ck "SPEC-0008/7: update-check created with GitHub remote" '[ -f "$E/.github/workflows/casa-update-check.yml" ]'
 
-# EARS 12 — remote sem adaptador de CI (ex.: GitLab) → hook + AVISO, sem workflow (ADR-0006)
+# EARS 12 — non-GitHub remote (e.g. GitLab) → hook + WARNING, no GitHub workflows
 H="$(mktemp -d)/gl"; mkdir -p "$H"; git init -q "$H"; git -C "$H" remote add origin https://gitlab.com/org/x.git
 OUT=$(python3 "$INIT" "$H" 2>&1)
-ck "EARS-12: hook instalado com remote não-GitHub"   '[ -e "$H/.git/hooks/pre-commit" ]'
-ck "EARS-12: workflow não criado com remote não-GitHub" '[ ! -f "$H/.github/workflows/docs-check.yml" ]'
-ck "SPEC-0008/7: update-check não criado sem GitHub" '[ ! -f "$H/.github/workflows/casa-update-check.yml" ]'
-ck "EARS-12: AVISO orienta integrar ao CI do host"   'echo "$OUT" | grep -q "AVISO.*sem adaptador de CI.*gitlab.com"'
+ck "EARS-12: hook installed with non-GitHub remote"  '[ -e "$H/.git/hooks/pre-commit" ]'
+ck "EARS-12: workflow not created with non-GitHub remote" '[ ! -f "$H/.github/workflows/docs-check.yml" ]'
+ck "SPEC-0008/7: update-check not created without GitHub" '[ ! -f "$H/.github/workflows/casa-update-check.yml" ]'
+ck "EARS-12: WARNING advises integrating with host CI" 'echo "$OUT" | grep -q "WARNING.*no CI adapter.*gitlab.com"'
 
-# EARS 8 — hook alheio não é tocado
+# EARS 8 — foreign hook untouched
 F="$(mktemp -d)/f"; mkdir -p "$F"; git init -q "$F"
-printf '#!/bin/sh\necho alheio\n' > "$F/.git/hooks/pre-commit"; chmod +x "$F/.git/hooks/pre-commit"
+printf '#!/bin/sh\necho foreign\n' > "$F/.git/hooks/pre-commit"; chmod +x "$F/.git/hooks/pre-commit"
 OUT=$(python3 "$INIT" "$F" 2>&1)
-ck "EARS-8: hook alheio preservado"                  'grep -q "echo alheio" "$F/.git/hooks/pre-commit"'
-ck "EARS-8: hook alheio gera AVISO"                  'echo "$OUT" | grep -q "AVISO.*não é o do CASA"'
+ck "EARS-8: foreign hook preserved"                  'grep -q "echo foreign" "$F/.git/hooks/pre-commit"'
+ck "EARS-8: foreign hook emits WARNING"              'echo "$OUT" | grep -q "WARNING.*not a CASA hook"'
 
-# EARS 5, 9 — legado sem .git e com docs inválidos: instala, relata, exit 0
-G="$(mktemp -d)/l"; mkdir -p "$G/docs/adr"; printf '# doc legado sem frontmatter\n' > "$G/docs/adr/0001-legado.md"
+# EARS 5, 9 — legacy repo without .git and with invalid docs: installs, reports, exits 0
+G="$(mktemp -d)/l"; mkdir -p "$G/docs/adr"; printf '# legacy doc without frontmatter\n' > "$G/docs/adr/0001-legacy.md"
 OUT=$(python3 "$INIT" "$G" 2>&1); RC=$?
-ck "EARS-9: exit 0 mesmo com docs legados inválidos" '[ "$RC" -eq 0 ]'
-ck "EARS-9: migração pendente relatada"              'echo "$OUT" | grep -q "migração"'
-ck "EARS-5: sem .git orienta e não instala gate"     'echo "$OUT" | grep -q "sem .git"'
+ck "EARS-9: exits 0 even with invalid legacy docs"   '[ "$RC" -eq 0 ]'
+ck "EARS-9: pending migration reported"              'echo "$OUT" | grep -q "migration"'
+ck "EARS-5: missing .git advises and skips gate"     'echo "$OUT" | grep -q "no .git"'
 
-# EARS 2 — destino = casa-standard
-ck "EARS-2: auto-destino abortado com exit != 0"     '! python3 "$INIT" "$ROOT"'
+# EARS 2 — target = casa-standard itself
+ck "EARS-2: self-target aborts with non-zero exit"   '! python3 "$INIT" "$ROOT"'
 
-# --- SPEC-0009: gate confiável ---
+# --- SPEC-0009: trustworthy gate ---
 gitrepo() { D="$(mktemp -d)/$1"; mkdir -p "$D"; git init -q -b "${2:-main}" "$D";
             git -C "$D" config user.email casa@example.invalid; git -C "$D" config user.name CASA; }
 
-# SPEC-0009/1 — DoD do router novo é o gate real, não comando de exemplo
+# SPEC-0009/1 — new router DoD invokes real docs-check, not sample npm commands
 A9="$(mktemp -d)/novo"; python3 "$INIT" "$A9" --repo-id app >/dev/null
-ck "SPEC-0009/1: DoD do router novo roda o docs-check" \
-   'sed -n "/^## Como validar/,/^## /p" "$A9/AGENTS.md" | grep -q "^python3 scripts/docs-check"'
-ck "SPEC-0009/1: DoD do router novo sem npm de exemplo" \
-   '! sed -n "/^## Como validar/,/^## /p" "$A9/AGENTS.md" | grep -q "^npm"'
+ck "SPEC-0009/1: new router DoD runs docs-check" \
+   'sed -n "/^## How to validate/,/^## /p" "$A9/AGENTS.md" | grep -q "^python3 scripts/docs-check"'
+ck "SPEC-0009/1: new router DoD has no sample npm" \
+   '! sed -n "/^## How to validate/,/^## /p" "$A9/AGENTS.md" | grep -q "^npm"'
 
-# SPEC-0009/15 — core.hooksPath: hook vai para o diretório que o git executa
+# SPEC-0009/15 — core.hooksPath: hook goes into the directory git actually executes
 gitrepo hp; git -C "$D" config core.hooksPath .githooks
 OUT=$(python3 "$INIT" "$D" 2>&1)
-ck "SPEC-0009/15: hook instalado no core.hooksPath" '[ -e "$D/.githooks/pre-commit" ] && [ ! -e "$D/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/15: hook installed into core.hooksPath" '[ -e "$D/.githooks/pre-commit" ] && [ ! -e "$D/.git/hooks/pre-commit" ]'
 
-# SPEC-0009/16 — worktree: hook no diretório comum, como cópia; checkout sem toolchain segue livre
+# SPEC-0009/16 — worktree: hook in common dir as copy; checkout without toolchain still commits
 gitrepo wtmain; git -C "$D" commit -q --allow-empty -m i; MAIN="$D"
 WT="$(mktemp -d)/wt"; git -C "$MAIN" worktree add -q "$WT" -b feat
 python3 "$INIT" "$WT" >/dev/null 2>&1
-ck "SPEC-0009/16: hook do worktree no diretório comum" '[ -f "$MAIN/.git/hooks/pre-commit" ]'
-ck "SPEC-0009/16: hook comum é cópia, não link para um worktree" '[ ! -L "$MAIN/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/16: worktree hook placed in common dir" '[ -f "$MAIN/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/16: common hook is a copy, not a symlink" '[ ! -L "$MAIN/.git/hooks/pre-commit" ]'
 echo x > "$MAIN/x.txt"; git -C "$MAIN" add x.txt
-ck "SPEC-0009/16: checkout sem toolchain não é bloqueado" 'git -C "$MAIN" commit -q -m x'
+ck "SPEC-0009/16: checkout without toolchain is not blocked" 'git -C "$MAIN" commit -q -m x'
 
-# SPEC-0009/17 — destino é subpasta de outro repo: não instala gate no repo pai
-gitrepo pai; echo x > "$D/f"; git -C "$D" add f; git -C "$D" commit -q -m i
+# SPEC-0009/17 — target is subfolder of parent repo: does not install hook in parent
+gitrepo parent; echo x > "$D/f"; git -C "$D" add f; git -C "$D" commit -q -m i
 OUT=$(python3 "$INIT" "$D/sub" 2>&1)
-ck "SPEC-0009/17: subpasta não instala hook no repo pai" '[ ! -e "$D/.git/hooks/pre-commit" ]'
-ck "SPEC-0009/17: AVISO orienta" 'echo "$OUT" | grep -q "AVISO.*sem ser a raiz"'
+ck "SPEC-0009/17: subfolder does not install hook in parent repo" '[ ! -e "$D/.git/hooks/pre-commit" ]'
+ck "SPEC-0009/17: WARNING explains" 'echo "$OUT" | grep -q "WARNING.*without being its root"'
 echo y >> "$D/f"; git -C "$D" add f
-ck "SPEC-0009/17: repo pai segue commitando" 'git -C "$D" commit -q -m y'
+ck "SPEC-0009/17: parent repo keeps committing cleanly" 'git -C "$D" commit -q -m y'
 
-# SPEC-0009/18 — GitHub com branch padrão master; workflow divergente gera AVISO
+# SPEC-0009/18 — GitHub with default branch master; divergent workflow emits WARNING
 gitrepo ghm master; git -C "$D" remote add origin git@github.com:acme/app.git
 git -C "$D" commit -q --allow-empty -m i
 OUT=$(python3 "$INIT" "$D" 2>&1)
 WF="$D/.github/workflows/docs-check.yml"
-ck "SPEC-0009/18: push no branch padrão real" 'grep -q "branches: \[master\]" "$WF"'
-ck "SPEC-0009/18: base de comparação vem do evento" 'grep -q "github.base_ref" "$WF" && grep -q "github.event.before" "$WF"'
-ck "SPEC-0009/18: nota de check obrigatório" 'echo "$OUT" | grep -q "OBRIGATÓRIO na proteção do branch master"'
-echo "# customizado" >> "$WF"
+ck "SPEC-0009/18: push uses real default branch" 'grep -q "branches: \[master\]" "$WF"'
+ck "SPEC-0009/18: comparison base comes from event" 'grep -q "github.base_ref" "$WF" && grep -q "github.event.before" "$WF"'
+ck "SPEC-0009/18: note about required status check" 'echo "$OUT" | grep -q "REQUIRED in branch protection for master"'
+echo "# customized" >> "$WF"
 OUT=$(python3 "$INIT" "$D" 2>&1)
-ck "SPEC-0009/18: workflow divergente gera AVISO e é preservado" \
-   'echo "$OUT" | grep -q "AVISO.*difere do template" && grep -q "customizado" "$WF"'
+ck "SPEC-0009/18: divergent workflow emits WARNING and is preserved" \
+   'echo "$OUT" | grep -q "WARNING.*differs from this version" && grep -q "customized" "$WF"'
 
-# --- SPEC-0010: skills do ciclo (ADR-0017) ---
+# --- SPEC-0010: delivery-cycle skills (ADR-0017) ---
 SK="$(mktemp -d)/sk"; python3 "$INIT" "$SK" --repo-id sk >/dev/null
 NAMES="casa-explore casa-propose casa-apply casa-verify casa-close"
 all_in() { for n in $NAMES; do [ -f "$1/$n/SKILL.md" ] || return 1; done; }
 
-# SPEC-0010/1 — T1: as cinco skills nos dois diretórios
-ck "SPEC-0010/1: skills em .agents/skills"         'all_in "$SK/.agents/skills"'
-ck "SPEC-0010/1: skills em .claude/skills"         'all_in "$SK/.claude/skills"'
+ck "SPEC-0010/1: skills in .agents/skills"         'all_in "$SK/.agents/skills"'
+ck "SPEC-0010/1: skills in .claude/skills"         'all_in "$SK/.claude/skills"'
 
-# SPEC-0010/2 — cópias idênticas entre si e ao template, com o link do STANDARD no ref
-# carimbado no router (SPEC-0010/8): um fato, uma fonte
 SKREF="$(sed -n 's/^casa-standard-ref: *\([^ ]*\).*/\1/p' "$SK/AGENTS.md")"
 same_all() { for n in $NAMES; do
                sed "s#/casa-standard/blob/main/#/casa-standard/blob/$SKREF/#" "$ROOT/docs/templates/skills/$n/SKILL.md" > "$SK.tpl"
                cmp -s "$SK.tpl" "$SK/.agents/skills/$n/SKILL.md" && cmp -s "$SK.tpl" "$SK/.claude/skills/$n/SKILL.md" || return 1
              done; }
-ck "SPEC-0010/2: cópias idênticas ao template renderizado" 'same_all'
-ck "SPEC-0010/8: skills apontam o STANDARD no ref da toolchain" \
+ck "SPEC-0010/2: copies identical to rendered template" 'same_all'
+ck "SPEC-0010/8: skills point to STANDARD at toolchain ref" \
    '[ -n "$SKREF" ] && grep -q "casa-standard/blob/$SKREF/STANDARD.md" "$SK/.claude/skills/casa-explore/SKILL.md"'
 SKL="$(mktemp -d)/skl"; CASA_STANDARD_REF=local python3 "$INIT" "$SKL" --repo-id skl >/dev/null
-ck "SPEC-0010/8b: ref local mantém blob/main/" \
+ck "SPEC-0010/8b: local ref keeps blob/main/" \
    'grep -q "^casa-standard-ref: local " "$SKL/AGENTS.md" && grep -q "casa-standard/blob/main/STANDARD.md" "$SKL/.agents/skills/casa-explore/SKILL.md"'
 
-# SPEC-0010/3 — formato Agent Skills portável (agentskills.io/specification)
-ck "SPEC-0010/3: frontmatter válido e portável" 'python3 - "$ROOT/docs/templates/skills" <<'"'"'EOF'"'"'
+# SPEC-0010/3 — portable Agent Skills frontmatter
+ck "SPEC-0010/3: valid portable frontmatter" 'python3 - "$ROOT/docs/templates/skills" <<'"'"'EOF'"'"'
 import re, sys
 from pathlib import Path
 dirs = sorted(p for p in Path(sys.argv[1]).iterdir() if p.is_dir())
@@ -191,112 +188,112 @@ for d in dirs:
     t = (d / "SKILL.md").read_text(encoding="utf-8")
     assert t.startswith("---\n"), d
     fm = t.split("---\n")[1]
-    assert len(fm.strip().splitlines()) == 2, (d, fm)                  # sem linha extra/duplicada
+    assert len(fm.strip().splitlines()) == 2, (d, fm)
     keys = dict(re.findall(r"^([a-z-]+): (.*)$", fm, re.M))
-    assert set(keys) == {"name", "description"}, (d, keys)            # só campos portáveis
+    assert set(keys) == {"name", "description"}, (d, keys)
     n, desc = keys["name"], keys["description"]
     assert n == d.name and re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", n) and len(n) <= 64, n
     assert 0 < len(desc) <= 1024 and desc[0].isalnum() and "<" not in desc and ">" not in desc, d
-    assert ": " not in desc and " #" not in desc, d                    # escalar YAML simples
+    assert ": " not in desc and " #" not in desc, d
 EOF'
 
-# SPEC-0010/4 — todo scripts/… citado nas skills existe na toolchain instalada
+# SPEC-0010/4 — every scripts/... referenced in skills exists in installed target
 cmds_exist() { for s in $(grep -oh "scripts/[a-z-]*" "$SK"/.agents/skills/*/SKILL.md | sort -u); do
                [ -f "$SK/$s" ] || return 1; done; }
-ck "SPEC-0010/4: comandos citados existem no destino" 'cmds_exist'
+ck "SPEC-0010/4: referenced commands exist in target" 'cmds_exist'
 
-# SPEC-0010/5 — casa-* alterada volta ao template; skill do repo com outro nome intocada
-echo "edição local" >> "$SK/.claude/skills/casa-verify/SKILL.md"
-mkdir -p "$SK/.claude/skills/minha-skill"; printf -- "---\nname: minha-skill\ndescription: x\n---\n" > "$SK/.claude/skills/minha-skill/SKILL.md"
+# SPEC-0010/5 — modified casa-* restored to template; custom repo skill untouched
+echo "local edit" >> "$SK/.claude/skills/casa-verify/SKILL.md"
+mkdir -p "$SK/.claude/skills/my-skill"; printf -- "---\nname: my-skill\ndescription: x\n---\n" > "$SK/.claude/skills/my-skill/SKILL.md"
 OUT=$(python3 "$INIT" "$SK" 2>&1)
-ck "SPEC-0010/5: casa-* divergente é atualizada"   'same_all && echo "$OUT" | grep -q "atualizado.*claude/skills/casa-"'
-ck "SPEC-0010/5: skill do repo intocada"           'grep -q "name: minha-skill" "$SK/.claude/skills/minha-skill/SKILL.md"'
+ck "SPEC-0010/5: divergent casa-* skill updated"   'same_all && echo "$OUT" | grep -q "updated.*claude/skills/casa-"'
+ck "SPEC-0010/5: custom repo skill untouched"      'grep -q "name: my-skill" "$SK/.claude/skills/my-skill/SKILL.md"'
 
-# SPEC-0010/6 — T0 não recebe skills (novo, legado com --tier T0, casa-tier entre aspas e migração T1→T0)
+# SPEC-0010/6 — T0 receives no skills (greenfield, legacy, quoted tier, T1→T0 migration)
 T0="$(mktemp -d)/t0"; python3 "$INIT" "$T0" --tier T0 >/dev/null
-ck "SPEC-0010/6: T0 sem skills"                    '[ ! -e "$T0/.agents/skills" ] && [ ! -e "$T0/.claude/skills" ]'
-T0L="$(mktemp -d)/t0l"; mkdir -p "$T0L"; printf '# Meu POC\n' > "$T0L/AGENTS.md"
+ck "SPEC-0010/6: T0 has no skills"                 '[ ! -e "$T0/.agents/skills" ] && [ ! -e "$T0/.claude/skills" ]'
+T0L="$(mktemp -d)/t0l"; mkdir -p "$T0L"; printf '# My POC\n' > "$T0L/AGENTS.md"
 python3 "$INIT" "$T0L" --tier T0 >/dev/null
-ck "SPEC-0010/6b: legado sem casa-tier respeita --tier T0" '[ ! -e "$T0L/.agents/skills" ] && [ ! -e "$T0L/.claude/skills" ]'
+ck "SPEC-0010/6b: legacy without casa-tier honors --tier T0" '[ ! -e "$T0L/.agents/skills" ] && [ ! -e "$T0L/.claude/skills" ]'
 T0Q="$(mktemp -d)/t0q"; python3 "$INIT" "$T0Q" --tier T0 >/dev/null
 sed -i 's/casa-tier: T0/casa-tier: "T0"/' "$T0Q/AGENTS.md"
 printf '\n<!-- casa-tier: T1 -->\n' >> "$T0Q/AGENTS.md"
 python3 "$INIT" "$T0Q" >/dev/null
-ck "SPEC-0010/6c: casa-tier entre aspas continua T0" '[ ! -e "$T0Q/.agents/skills" ] && [ ! -e "$T0Q/.claude/skills" ]'
+ck "SPEC-0010/6c: quoted casa-tier stays T0"       '[ ! -e "$T0Q/.agents/skills" ] && [ ! -e "$T0Q/.claude/skills" ]'
 T0M="$(mktemp -d)/t0m"; python3 "$INIT" "$T0M" >/dev/null
-mkdir -p "$T0M/.claude/skills/minha-skill"; printf -- '---\nname: minha-skill\ndescription: x\n---\n' > "$T0M/.claude/skills/minha-skill/SKILL.md"
+mkdir -p "$T0M/.claude/skills/my-skill"; printf -- '---\nname: my-skill\ndescription: x\n---\n' > "$T0M/.claude/skills/my-skill/SKILL.md"
 sed -i 's/casa-tier: T1/casa-tier: T0/' "$T0M/AGENTS.md"
 OUT=$(python3 "$INIT" "$T0M" 2>&1)
-ck "SPEC-0010/6d: migração T1→T0 remove casa-* e preserva skill do repo" \
-   'echo "$OUT" | grep -q "removido.*skills do ciclo" && [ ! -e "$T0M/.agents/skills" ] && [ ! -e "$T0M/.claude/skills/casa-explore" ] && [ -f "$T0M/.claude/skills/minha-skill/SKILL.md" ]'
+ck "SPEC-0010/6d: T1→T0 migration removes casa-* and preserves custom skill" \
+   'echo "$OUT" | grep -q "removed.*cycle skills" && [ ! -e "$T0M/.agents/skills" ] && [ ! -e "$T0M/.claude/skills/casa-explore" ] && [ -f "$T0M/.claude/skills/my-skill/SKILL.md" ]'
 
-# SPEC-0010/9 — `.claude` como arquivo: AVISO, sem traceback, o resto da instalação segue
+# SPEC-0010/9 — `.claude` as regular file: WARNING, no traceback, rest of installation succeeds
 gitrepo s9; : > "$D/.claude"
 OUT=$(python3 "$INIT" "$D" 2>&1); RC=$?
-ck "SPEC-0010/9: .claude arquivo não derruba o casa-init" \
-   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q Traceback && echo "$OUT" | grep -q "AVISO.*claude/skills"'
-ck "SPEC-0010/9: gate e .agents/skills instalados mesmo assim" \
+ck "SPEC-0010/9: .claude file does not crash casa-init" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q Traceback && echo "$OUT" | grep -q "WARNING.*claude/skills"'
+ck "SPEC-0010/9: gate and .agents/skills still installed" \
    '[ -e "$D/.git/hooks/pre-commit" ] && [ -f "$D/.agents/skills/casa-explore/SKILL.md" ]'
 
-# SPEC-0010/10 — diretório de skills no .gitignore: AVISO (só esta máquina veria)
+# SPEC-0010/10 — skills dir ignored in .gitignore: WARNING
 gitrepo s10; printf '.claude/\n' > "$D/.gitignore"
 OUT=$(python3 "$INIT" "$D" 2>&1)
-ck "SPEC-0010/10: .claude/ ignorado gera AVISO" 'echo "$OUT" | grep -q "AVISO.*claude/skills/ está no .gitignore"'
+ck "SPEC-0010/10: ignored .claude/ emits WARNING" 'echo "$OUT" | grep -q "WARNING.*claude/skills/ is ignored by .gitignore"'
 
-# SPEC-0010/11 — skill casa-* aposentada sai do adotante; homônima válida ou não-UTF-8 fica
-gitrepo s11; mkdir -p "$D/.agents/skills/casa-velha" "$D/.claude/skills/casa-velha" "$D/.claude/skills/casa-bin"
-printf -- '---\nname: casa-velha\ndescription: x\n---\n\n# CASA · velha\n' > "$D/.agents/skills/casa-velha/SKILL.md"
-printf -- '---\nname: casa-velha\ndescription: x\n---\n\n# Skill própria do adotante\n' > "$D/.claude/skills/casa-velha/SKILL.md"
-printf '\377\376invalido' > "$D/.claude/skills/casa-bin/SKILL.md"
+# SPEC-0010/11 — retired casa-* skill removed; adopter homonym or binary preserved
+gitrepo s11; mkdir -p "$D/.agents/skills/casa-old" "$D/.claude/skills/casa-old" "$D/.claude/skills/casa-bin"
+printf -- '---\nname: casa-old\ndescription: x\n---\n\n# CASA · old\n' > "$D/.agents/skills/casa-old/SKILL.md"
+printf -- '---\nname: casa-old\ndescription: x\n---\n\n# Adopter custom skill\n' > "$D/.claude/skills/casa-old/SKILL.md"
+printf '\377\376invalid' > "$D/.claude/skills/casa-bin/SKILL.md"
 OUT=$(python3 -c "
 import sys
 from importlib.machinery import SourceFileLoader
 m = SourceFileLoader('casa_init', sys.argv[1]).load_module()
-m.RETIRED_SKILLS = ['casa-velha', 'casa-bin']; sys.argv = ['casa-init', sys.argv[2]]; m.main()" "$INIT" "$D" 2>&1); RC=$?
-ck "SPEC-0010/11: aposentada removida pelo marcador CASA" '[ "$RC" -eq 0 ] && [ ! -e "$D/.agents/skills/casa-velha" ]'
-ck "SPEC-0010/11: homônima válida (name=dir) preservada" '[ -f "$D/.claude/skills/casa-velha/SKILL.md" ]'
-ck "SPEC-0010/11b: homônima não-UTF-8 preservada sem traceback" '[ -f "$D/.claude/skills/casa-bin/SKILL.md" ] && ! echo "$OUT" | grep -q Traceback'
+m.RETIRED_SKILLS = ['casa-old', 'casa-bin']; sys.argv = ['casa-init', sys.argv[2]]; m.main()" "$INIT" "$D" 2>&1); RC=$?
+ck "SPEC-0010/11: retired CASA skill removed by marker" '[ "$RC" -eq 0 ] && [ ! -e "$D/.agents/skills/casa-old" ]'
+ck "SPEC-0010/11: adopter homonym preserved" '[ -f "$D/.claude/skills/casa-old/SKILL.md" ]'
+ck "SPEC-0010/11b: non-UTF-8 homonym preserved without traceback" '[ -f "$D/.claude/skills/casa-bin/SKILL.md" ] && ! echo "$OUT" | grep -q Traceback'
 
-# SPEC-0010/12 — toda seção §N ou subseção §N.M citada nas skills existe no STANDARD
+# SPEC-0010/12 — every §N or §N.M cited in skills exists in STANDARD.md
 secs_exist() { for s in $(grep -ohE "§[0-9]+(\.[0-9]+)*" "$ROOT"/docs/templates/skills/*/SKILL.md | sort -u | tr -d '§'); do
                case "$s" in
                  *.*) grep -q "^### $s " "$ROOT/STANDARD.md" || return 1 ;;
                  *)   grep -q "^## $s\. " "$ROOT/STANDARD.md" || return 1 ;;
                esac; done; }
-ck "SPEC-0010/12: seções e subseções citadas existem no STANDARD" 'secs_exist'
+ck "SPEC-0010/12: cited sections and subsections exist in STANDARD.md" 'secs_exist'
 
-# SPEC-0009/22 — worktree com validador anterior ao --staged não bloqueia todo commit
-gitrepo wt22; python3 "$INIT" "$D" >/dev/null 2>&1; git -C "$D" add -A; git -C "$D" commit -q -m adota >/dev/null 2>&1
-git -C "$D" checkout -q -b velho
+# SPEC-0009/22 — worktree with validator older than --staged falls back cleanly
+gitrepo wt22; python3 "$INIT" "$D" >/dev/null 2>&1; git -C "$D" add -A; git -C "$D" commit -q -m adopt >/dev/null 2>&1
+git -C "$D" checkout -q -b old-branch
 printf '#!/usr/bin/env python3\nimport argparse\nap = argparse.ArgumentParser(); ap.add_argument("--root")\nap.parse_args()\n' > "$D/scripts/docs-check"
-git -C "$D" commit -qam "validador antigo"; git -C "$D" checkout -q main
-W22="$(mktemp -d)/w"; git -C "$D" worktree add -q "$W22" velho
+git -C "$D" commit -qam "old validator"; git -C "$D" checkout -q main
+W22="$(mktemp -d)/w"; git -C "$D" worktree add -q "$W22" old-branch
 echo x > "$W22/x"; git -C "$W22" add x
 OUT=$(git -C "$W22" commit -q -m x 2>&1); RC=$?
-ck "SPEC-0009/22: validador antigo roda no modo dele" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "anterior ao --staged"'
+ck "SPEC-0009/22: validator predating --staged runs in disk mode" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "predates --staged"'
 
-# SPEC-0009/23 — core.hooksPath global: não instala para todos os repos da máquina
+# SPEC-0009/23 — global core.hooksPath: refuses installing hook for all repos
 G23="$(mktemp -d)"; mkdir -p "$G23/hooks"; printf '[core]\n\thooksPath = %s/hooks\n' "$G23" > "$G23/gitconfig"
 gitrepo h23; OUT=$(GIT_CONFIG_GLOBAL="$G23/gitconfig" python3 "$INIT" "$D" 2>&1)
-ck "SPEC-0009/23: hooksPath global não recebe hook" '[ -z "$(ls -A "$G23/hooks")" ]'
-ck "SPEC-0009/23: AVISO explica" 'echo "$OUT" | grep -q "AVISO.*fora deste repo"'
+ck "SPEC-0009/23: global hooksPath receives no hook" '[ -z "$(ls -A "$G23/hooks")" ]'
+ck "SPEC-0009/23: WARNING explains" 'echo "$OUT" | grep -q "WARNING.*outside this repo"'
 
-# SPEC-0009/24 — hook CASA de versão anterior é atualizado; alheio segue intocado (EARS-8)
+# SPEC-0009/24 + SPEC-0012/5 — legacy PT-BR CASA 1.0–1.10 hook copy IS recognized and upgraded!
 gitrepo h24; python3 "$INIT" "$D" >/dev/null 2>&1
 rm "$D/.git/hooks/pre-commit"
 printf '#!/usr/bin/env bash\n# Gate local do CASA Standard (STANDARD §3, ADR-0001) para repo sem remote/CI.\nexec python3 "$(git rev-parse --show-toplevel)/scripts/docs-check"\n' > "$D/.git/hooks/pre-commit"
 OUT=$(python3 "$INIT" "$D" 2>&1)
-ck "SPEC-0009/24: cópia antiga do hook CASA é atualizada" \
-   'echo "$OUT" | grep -q "atualizado.*pre-commit" && grep -q -- "--staged" "$D/.git/hooks/pre-commit"'
+ck "SPEC-0009/24 + SPEC-0012/5: legacy PT-BR CASA hook copy upgraded" \
+   'echo "$OUT" | grep -q "updated.*pre-commit" && grep -q -- "--staged" "$D/.git/hooks/pre-commit"'
 
-# SPEC-0009/29 — repo publicado sem origin/HEAD, com um único branch remoto
+# SPEC-0009/29 — repo published without origin/HEAD and a single remote branch
 gitrepo r29 develop; git -C "$D" remote add origin git@github.com:acme/app.git
 git -C "$D" commit -q --allow-empty -m i; git -C "$D" update-ref refs/remotes/origin/develop HEAD
 python3 "$INIT" "$D" >/dev/null 2>&1
-ck "SPEC-0009/29: workflow usa o único branch remoto" 'grep -q "branches: \[develop\]" "$D/.github/workflows/docs-check.yml"'
+ck "SPEC-0009/29: workflow uses single remote branch" 'grep -q "branches: \[develop\]" "$D/.github/workflows/docs-check.yml"'
 
-# SPEC-0009/30 — fila de merge também roda o gate, contra a base do grupo
-ck "SPEC-0009/30: workflow dispara em merge_group" \
+# SPEC-0009/30 — merge queue also runs the gate against merge_group.base_sha
+ck "SPEC-0009/30: workflow triggers on merge_group" \
    'grep -q "^  merge_group:" "$D/.github/workflows/docs-check.yml" && grep -q "merge_group.base_sha" "$D/.github/workflows/docs-check.yml"'
 
 echo

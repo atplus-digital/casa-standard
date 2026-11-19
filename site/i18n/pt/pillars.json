@@ -1,0 +1,26 @@
+[
+  {
+    "letter": "C",
+    "name": "Contexto",
+    "what": "Estado atual em camadas de custo de contexto: router `AGENTS.md` + capítulos sob demanda",
+    "where": "AGENTS.md, docs/context/"
+  },
+  {
+    "letter": "A",
+    "name": "ADRs",
+    "what": "Decisões estruturais, datadas e imutáveis (MADR 4.0 + Confirmação)",
+    "where": "docs/adr/"
+  },
+  {
+    "letter": "S",
+    "name": "Specs",
+    "what": "Comportamento observável com DoD executável",
+    "where": "docs/specs/"
+  },
+  {
+    "letter": "A",
+    "name": "Automação",
+    "what": "`docs-check` valida frontmatter, grafo e higiene no CI",
+    "where": "scripts/docs-check"
+  }
+]

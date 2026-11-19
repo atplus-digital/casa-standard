@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Cenários das SPEC-0003, 0004, 0006 e 0009 (docs-check). DoD: exit 0 = todos verdes.
+# Scenarios for SPEC-0003, 0004, 0006, 0009, and 0012 (docs-check). DoD: exit 0 = all green.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
 INIT="$ROOT/scripts/casa-init"
-# Versão de contrato derivada da constante do validador (nunca hardcodada no fixture).
+# Contract version derived dynamically from the validator constant (never hardcoded).
 DC_V="$(sed -n 's/^CONTRACT_VERSION = "\(.*\)"$/\1/p' "$CHECK")"
-# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
+# Isolate machine git config (global core.hooksPath, etc.).
 GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
-set_version() { # troca o casa-version do router do fixture atual
+set_version() {
     sed "s/^casa-version: .*/casa-version: $1/" "$R/AGENTS.md" > "$R/AGENTS.tmp" \
         && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
 }
@@ -29,17 +29,17 @@ casa-version: 0.0
 casa-standard-ref: test
 ```
 
-## Como validar (DoD global do repo)
+## How to validate (global repo DoD)
 
 ```bash
 python3 scripts/docs-check
 ```
 
-## Mapa de contexto
+## Context map
 
-| Capítulo | Quando carregar |
+| Chapter | When to load |
 |---|---|
-| (nenhum ainda) | — |
+| (none yet) | — |
 EOF
     set_version "$DC_V"
 }
@@ -55,9 +55,9 @@ builds-on: []
 implemented-by: $impl
 ---
 
-# Spec de teste
+# Test Spec
 
-## Questões em aberto
+## Open questions
 
 $questions
 
@@ -67,7 +67,7 @@ $questions
 $dod
 \`\`\`
 
-## Verificação
+## Verification
 
 \`\`\`text
 $verification
@@ -88,31 +88,31 @@ deciders: [maicon]
 ---
 
 $truth
-# Decisão de teste
+# Test decision
 
-## Contexto e problema
+## Context and Problem
 
 $body
 
-## Direcionadores da decisão
+## Decision Drivers
 
-- teste
+- test
 
-## Opções consideradas
+## Considered Options
 
-### Opção 1 — teste
-**Prós:** simples
-**Contras:** nenhum
+### Option 1 — test
+**Pros:** simple
+**Cons:** none
 
-## Decisão
+## Decision
 
-Manter teste.
+Keep test.
 
-## Consequências
+## Consequences
 
-- teste
+- test
 
-## Confirmação
+## Confirmation
 
 \`\`\`bash
 true
@@ -120,169 +120,168 @@ true
 EOF
 }
 
-# EARS 1 — greenfield via casa-init continua verde
+# EARS 1 — greenfield via casa-init passes docs-check
 A="$(mktemp -d)/novo"
 python3 "$INIT" "$A" --repo-id app >/dev/null
-ck "EARS-1: repo novo criado pelo casa-init passa docs-check" \
+ck "EARS-1: greenfield repo created by casa-init passes docs-check" \
    '(cd "$A" && python3 scripts/docs-check)'
 
-# EARS 2 — router sem casa-version falha
+# EARS 2 — router missing casa-version fails
 mkrepo
 grep -v '^casa-version:' "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-2: router sem casa-version falha" \
+ck "EARS-2: router without casa-version fails" \
    '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "casa-version"'
 
-# EARS 3 — ponteiro de contexto quebrado falha
+# EARS 3 — broken context pointer fails
 mkrepo
-awk '{ if ($0 == "| (nenhum ainda) | — |") print "| `docs/context/INFRA.md` | mexeu em infra |"; else print }' \
+awk '{ if ($0 == "| (none yet) | — |") print "| `docs/context/INFRA.md` | touching infra |"; else print }' \
     "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-3: Mapa de contexto com arquivo inexistente falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Mapa de contexto"'
+ck "EARS-3: Context map pointing to missing file fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Context map"'
 
-# EARS 4 — Spec accepted com questão aberta falha
+# EARS 4 — Spec accepted with unchecked open question fails
 mkrepo
-spec_doc accepted "[]" "- [ ] decidir borda" "true" "não implementada"
+spec_doc accepted "[]" "- [ ] decide edge case" "true" "not implemented"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-4: Spec accepted com checkbox aberto falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "questões em aberto"'
+ck "EARS-4: Spec accepted with unchecked checkbox fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "open questions"'
 
-# EARS 5 — DoD com placeholder falha
+# EARS 5 — DoD with placeholder fails
 mkrepo
-spec_doc accepted "[]" "(nenhuma)" "npm test -- --run <escopo>" "não implementada"
+spec_doc accepted "[]" "(none)" "npm test -- --run <scope>" "not implemented"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-5: DoD com placeholder falha" \
+ck "EARS-5: DoD with placeholder fails" \
    '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "placeholder"'
 
-# EARS 6 — implemented-by precisa existir
+# EARS 6 — implemented-by must exist
 mkrepo
-spec_doc implemented "[nao-existe.py]" "(nenhuma)" "true" "true -> exit 0"
+spec_doc implemented "[does-not-exist.py]" "(none)" "true" "true -> exit 0"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-6: implemented-by inexistente falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "path inexistente"'
+ck "EARS-6: non-existent implemented-by fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "non-existent path"'
 
-# EARS 7 — ADR aceito não aceita emenda substantiva
+# EARS 7 — accepted ADR rejects substantive body edit
 mkrepo
 mkdir -p "$R/docs/adr"
-adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Original context."
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git init -q &&
  git config user.email casa@example.invalid && git config user.name CASA &&
  git add . && git commit -q -m base)
-adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto alterado."
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Modified context."
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m bad)
 OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
-ck "EARS-7: emenda substantiva em ADR aceito falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "corpo alterado"'
+ck "EARS-7: substantive edit to accepted ADR fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "body modified"'
 
-# EARS 8 — supersessão com VERDADE ATUAL passa
+# EARS 8 — supersession with CURRENT TRUTH passes
 mkrepo
 mkdir -p "$R/docs/adr"
-adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Original context."
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git init -q &&
  git config user.email casa@example.invalid && git config user.name CASA &&
  git add . && git commit -q -m base)
-adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova decisão."
-adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: substituído por ADR-0002" "Contexto original."
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "New decision."
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> ⚠️ CURRENT TRUTH: superseded by ADR-0002" "Original context."
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add . && git commit -q -m supersede)
 OUT=$(python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref HEAD~1 2>&1); RC=$?
-ck "EARS-8: supersessão com VERDADE ATUAL passa" '[ "$RC" -eq 0 ]'
+ck "EARS-8: supersession with CURRENT TRUTH passes" '[ "$RC" -eq 0 ]'
 
-# --- SPEC-0004: capítulo de contexto reconhecido (TESTS) ---
+# --- SPEC-0004: recognized context chapter (TESTS) ---
 
-decl_tests() { # injeta o ponteiro do capítulo $1 no Mapa de contexto do router
-    awk -v row="| \`$1\` | mexeu em teste |" \
-        '{ if ($0 == "| (nenhum ainda) | — |") print row; else print }' \
+decl_tests() {
+    awk -v row="| \`$1\` | touching tests |" \
+        '{ if ($0 == "| (none yet) | — |") print row; else print }' \
         "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
     mkdir -p "$R/docs/context"
 }
 
-# EARS 9 — TESTS.md declarado com comando canônico passa
+# EARS 9 — declared TESTS.md with canonical command passes
 mkrepo
 decl_tests "docs/context/TESTS.md"
 cat > "$R/docs/context/TESTS.md" <<'EOF'
-# Testes
+# Tests
 
-## Comandos canônicos
+## Canonical commands
 
 ```bash
 pytest -q
 ```
 EOF
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-9: TESTS.md declarado com comando canônico passa" '[ "$RC" -eq 0 ]'
+ck "EARS-9: declared TESTS.md with canonical command passes" '[ "$RC" -eq 0 ]'
 
-# EARS 10 — TESTS.md declarado sem comando falha
+# EARS 10 — declared TESTS.md without command fails
 mkrepo
 decl_tests "docs/context/TESTS.md"
-printf '# Testes\n\nRodamos os testes manualmente antes do merge.\n' > "$R/docs/context/TESTS.md"
+printf '# Tests\n\nWe run tests manually before merging.\n' > "$R/docs/context/TESTS.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-10: TESTS.md declarado sem comando falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "capítulo reconhecido"'
+ck "EARS-10: declared TESTS.md without command fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "recognized chapter"'
 
-# EARS 11 — capítulo genérico (INFRA) sem comando passa: só TESTS é reconhecido
+# EARS 11 — generic chapter (INFRA) without command passes
 mkrepo
 decl_tests "docs/context/INFRA.md"
-printf '# Infra\n\nSelf-hosted no Hetzner.\n' > "$R/docs/context/INFRA.md"
+printf '# Infra\n\nSelf-hosted on Hetzner.\n' > "$R/docs/context/INFRA.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "EARS-11: capítulo genérico sem comando passa (registry fechado)" '[ "$RC" -eq 0 ]'
+ck "EARS-11: generic chapter without command passes (closed registry)" '[ "$RC" -eq 0 ]'
 
-# --- SPEC-0006: sinalização de manutenção (ADR-0010, ADR-0011) ---
+# --- SPEC-0006: maintenance signaling (ADR-0010, ADR-0011) ---
 
-# SPEC-0006/1 — contrato declarado menor que a toolchain → aviso, exit 0
+# SPEC-0006/1 — declared contract lower than toolchain → warning, exit 0
 mkrepo
 set_version "0.9"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/1: casa-version menor gera aviso e passa" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*atrás da toolchain"'
+ck "SPEC-0006/1: lagging casa-version emits warning and exits 0" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*behind the installed toolchain"'
 
-# SPEC-0006/2 — contrato declarado maior que a toolchain → aviso de toolchain atrás
+# SPEC-0006/2 — declared contract higher than toolchain → warning
 mkrepo
 set_version "99.9"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/2: casa-version maior avisa toolchain atrás" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*rode scripts/casa-init"'
+ck "SPEC-0006/2: higher casa-version warns toolchain is behind" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*run scripts/casa-init"'
 
-# SPEC-0006/3 — versões iguais → nenhum aviso ADR-0010
+# SPEC-0006/3 — matching versions → no ADR-0010 warning
 mkrepo
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/3: versões iguais não geram aviso" \
+ck "SPEC-0006/3: matching versions emit no warning" \
    '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "ADR-0010"'
 
-# SPEC-0006/4 — casa-version malformado: só o erro de formato, sem aviso por cima
+# SPEC-0006/4 — malformed casa-version: format error only, no warning on top
 mkrepo
 set_version "banana"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/4: versão malformada só gera o erro de formato" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "semver simples" && ! echo "$OUT" | grep -q "ADR-0010"'
+ck "SPEC-0006/4: malformed version emits only format error" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "simple semver" && ! echo "$OUT" | grep -q "ADR-0010"'
 
-# SPEC-0006/5 — backlog em docs/context/ → aviso de localização, exit 0
+# SPEC-0006/5 — backlog in docs/context/ → warning, exit 0
 mkrepo
 mkdir -p "$R/docs/context"
-printf '# Backlog\n\n- pendência\n' > "$R/docs/context/BACKLOG.md"
+printf '# Backlog\n\n- item\n' > "$R/docs/context/BACKLOG.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/5: BACKLOG.md em docs/context/ gera aviso" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*mova para docs/BACKLOG.md"'
+ck "SPEC-0006/5: BACKLOG.md in docs/context/ emits warning" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*move to docs/BACKLOG.md"'
 
-# SPEC-0006/5b — variação de case também é apontada (listagem, não exists())
+# SPEC-0006/5b — case variant is also flagged
 mkrepo
 mkdir -p "$R/docs/context"
 printf '# Backlog\n' > "$R/docs/context/backlog.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/5b: backlog.md (case variante) gera aviso" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*mova para docs/BACKLOG.md"'
+ck "SPEC-0006/5b: backlog.md (case variant) emits warning" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*move to docs/BACKLOG.md"'
 
-# SPEC-0006/6 — docs/BACKLOG.md na raiz de docs é o lugar certo: silêncio
+# SPEC-0006/6 — docs/BACKLOG.md at docs root is silent
 mkrepo
 mkdir -p "$R/docs"
-printf '# Backlog\n\n- pendência\n' > "$R/docs/BACKLOG.md"
+printf '# Backlog\n\n- item\n' > "$R/docs/BACKLOG.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0006/6: docs/BACKLOG.md na raiz não gera aviso" \
+ck "SPEC-0006/6: docs/BACKLOG.md at docs root emits no warning" \
    '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "ADR-0011"'
 
-# --- ADR-0014: design-ref no vocabulário central ---
+# --- ADR-0014: design-ref in closed vocabulary ---
 
-# design-ref é campo conhecido (sem aviso) e exportado ao index.json
 mkrepo
 mkdir -p "$R/docs/specs"
 cat > "$R/docs/specs/0001-ui.md" <<EOF
@@ -293,252 +292,326 @@ builds-on: []
 design-ref: docs/design/mock.html
 ---
 
-# Spec de UI
+# UI Spec
 EOF
 python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "ADR-0014: design-ref não gera aviso de vocabulário" \
-   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "fora do vocabulário"'
-ck "ADR-0014: design-ref exportado ao index.json" \
+ck "ADR-0014: design-ref emits no vocabulary warning" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "unknown frontmatter field"'
+ck "ADR-0014: design-ref exported to index.json" \
    'grep -q "design-ref" "$R/docs/index.json"'
 
-# controle: campo realmente desconhecido segue avisando
 mkrepo
 mkdir -p "$R/docs/specs"
 cat > "$R/docs/specs/0001-x.md" <<EOF
 ---
 status: draft
 date: 2026-07-05
-campo-inventado: x
+invented-field: x
 ---
 
-# Spec com campo estranho
+# Spec with unknown field
 EOF
 python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1)
-ck "ADR-0014: campo desconhecido continua avisando" \
-   'echo "$OUT" | grep -q "fora do vocabulário"'
+ck "ADR-0014: unknown field still emits warning" \
+   'echo "$OUT" | grep -q "unknown frontmatter field"'
 
-# --- SPEC-0009: gate confiável ---
+# --- SPEC-0009: trustworthy gate ---
 
-gitify() { # transforma o fixture atual em repo git com um commit base
+gitify() {
     (cd "$R" && git init -q -b main && git config user.email casa@example.invalid &&
      git config user.name CASA && python3 "$CHECK" --emit-index >/dev/null &&
      git add -A && git commit -q -m base)
 }
 commit_all() { (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add -A && git commit -q -m "$1"); }
-set_dod() { # troca o bloco do DoD global do router pelo conteúdo de $1 (arquivo)
+set_dod() {
     python3 - "$R/AGENTS.md" "$1" <<'EOF'
 import re, sys
 p, blk = sys.argv[1], open(sys.argv[2]).read()
 t = open(p).read()
-t = re.sub(r"(## Como validar \(DoD global do repo\)\n\n)```bash\n.*?\n```\n", lambda m: m.group(1) + blk, t, flags=re.S)
+t = re.sub(r"(## How to validate \(global repo DoD\)\n\n)```bash\n.*?\n```\n", lambda m: m.group(1) + blk, t, flags=re.S)
 open(p, "w").write(t)
 EOF
 }
 
-# SPEC-0009/2 — DoD de exemplo do template antigo → AVISO
+# SPEC-0009/2 — legacy template sample DoD → WARNING (both EN and PT-BR variants)
 mkrepo
-printf '```bash\nnpm run typecheck        # exit 0\nnpm test                 # tudo verde\n```\n' > "$R/dod"; set_dod "$R/dod"
+printf '```bash\nnpm run typecheck        # exit 0\nnpm test                 # all green\n```\n' > "$R/dod"; set_dod "$R/dod"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/2: DoD de exemplo do template avisa" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*exemplo do template"'
+ck "SPEC-0009/2: legacy sample DoD emits warning" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*legacy template sample"'
 
-# SPEC-0009/3 — DoD global só dentro de comentário HTML → erro
+# SPEC-0009/3 — global DoD inside HTML comment → error
 mkrepo
 printf '<!--\n```bash\nmake test\n```\n-->\n' > "$R/dod"; set_dod "$R/dod"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/3: DoD global comentado falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "DoD global sem linha executável"'
+ck "SPEC-0009/3: commented-out global DoD fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "global DoD has no executable line"'
 
-# SPEC-0009/3b — TESTS.md cujo único comando está comentado → erro
+# SPEC-0009/3b — TESTS.md whose only command is commented out → error
 mkrepo
 decl_tests "docs/context/TESTS.md"
-printf '# Testes\n<!--\n```bash\nnpm test\n```\n-->\n' > "$R/docs/context/TESTS.md"
+printf '# Tests\n<!--\n```bash\nnpm test\n```\n-->\n' > "$R/docs/context/TESTS.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/3b: TESTS.md com comando só em comentário falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "capítulo reconhecido"'
+ck "SPEC-0009/3b: TESTS.md with commented-out command fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "recognized chapter"'
 
-# SPEC-0009/4 — placeholder no DoD global falha; literal entre aspas e redireção passam
+# SPEC-0009/4 — placeholder in global DoD warns; quoted literal & shell redirection pass
 mkrepo
-printf '```bash\nnpm test -- <escopo>   # exit 0\n```\n' > "$R/dod"; set_dod "$R/dod"
+printf '```bash\nnpm test -- <scope>   # exit 0\n```\n' > "$R/dod"; set_dod "$R/dod"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/4: placeholder no DoD global avisa (janela da 1.9)" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*DoD global contém placeholder"'
+ck "SPEC-0009/4: placeholder in global DoD warns" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*global DoD contains a placeholder"'
 mkrepo
-spec_doc accepted "[]" "(nenhuma)" 'npx vitest run -t "renders <Button> disabled"   # casos 1-2
-python3 tool.py <in.json >out.json   # caso 3' "não implementada"
+spec_doc accepted "[]" "(none)" 'npx vitest run -t "renders <Button> disabled"   # cases 1-2
+python3 tool.py <in.json >out.json   # case 3' "not implemented"
 python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/4: <Tag> entre aspas e redireção não são placeholder" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/4: quoted <Tag> and shell redirection are not placeholders" '[ "$RC" -eq 0 ]'
 
-# SPEC-0009/5 — ponteiro como link markdown para capítulo inexistente → erro
+# SPEC-0009/5 — Markdown link pointer to missing chapter → error
 mkrepo
-awk '{ if ($0 == "| (nenhum ainda) | — |") print "| [INFRA](docs/context/INFRA.md) | mexeu em infra |"; else print }' \
+awk '{ if ($0 == "| (none yet) | — |") print "| [INFRA](docs/context/INFRA.md) | touching infra |"; else print }' \
     "$R/AGENTS.md" > "$R/AGENTS.tmp" && mv "$R/AGENTS.tmp" "$R/AGENTS.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/5: link markdown para capítulo inexistente falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "inexistente .docs/context/INFRA.md"'
+ck "SPEC-0009/5: Markdown link to missing chapter fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "missing file .docs/context/INFRA.md"'
 
-# SPEC-0009/6 — frontmatter: chave duplicada, status vazio, status lista (sem traceback)
+# SPEC-0009/6 — frontmatter: duplicate key, empty status, list status (no traceback)
 mkrepo
 mkdir -p "$R/docs/adr"
 printf -- '---\nstatus: proposed\ndate: 2026-01-01\nstatus: accepted\n---\n# X\n' > "$R/docs/adr/0001-x.md"
 python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/6: chave duplicada falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "chave duplicada .status."'
+ck "SPEC-0009/6: duplicate key fails" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "duplicate key .status."'
 printf -- '---\nstatus: ""\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/6: status vazio conta como ausente" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "obrigatórios ausentes"'
+ck "SPEC-0009/6: empty status counts as missing" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "missing required fields"'
 printf -- '---\nstatus: [accepted]\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
 OUT=$(python3 "$CHECK" --root "$R" --warn-only 2>&1); RC=$?
-ck "SPEC-0009/6: status lista vira erro, sem traceback, --warn-only sai 0" \
-   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "status deve ser escalar" && ! echo "$OUT" | grep -q Traceback'
+ck "SPEC-0009/6: list status fails cleanly without traceback; --warn-only exits 0" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "status must be scalar" && ! echo "$OUT" | grep -q Traceback'
 
-# SPEC-0009/7 — builds-on apontando para o próprio doc → erro
+# SPEC-0009/7 — self-referential builds-on → warning
 mkrepo
 mkdir -p "$R/docs/adr"
 printf -- '---\nstatus: proposed\ndate: 2026-01-01\nbuilds-on: [ADR-0001]\n---\n# X\n' > "$R/docs/adr/0001-x.md"
 python3 "$CHECK" --root "$R" --emit-index >/dev/null
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/7: builds-on autorreferente avisa (janela da 1.9)" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "AVISO.*próprio doc"'
+ck "SPEC-0009/7: self-referential builds-on emits warning" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*points to the document itself"'
 
 imm() { python3 "$CHECK" --root "$R" --check-adr-immutability --base-ref "$1" 2>&1; }
 
-# SPEC-0009/8 — renomear ADR aceito não esconde edição; rename puro passa
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto original."; gitify
-(cd "$R" && git mv docs/adr/0001-x.md docs/adr/0001-novo-nome.md)
+# SPEC-0009/8 — renaming accepted ADR cannot conceal body edits; pure rename passes
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Original context."; gitify
+(cd "$R" && git mv docs/adr/0001-x.md docs/adr/0001-new-name.md)
 commit_all rename
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/8: rename puro de ADR aceito passa" '[ "$RC" -eq 0 ]'
-adr_doc "$R/docs/adr/0001-novo-nome.md" accepted null "" "Contexto alterado."
+ck "SPEC-0009/8: pure rename of accepted ADR passes" '[ "$RC" -eq 0 ]'
+adr_doc "$R/docs/adr/0001-new-name.md" accepted null "" "Edited context."
 commit_all edit
 OUT=$(imm HEAD~2); RC=$?
-ck "SPEC-0009/8: rename + edição de ADR aceito falha" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "renomeado de docs/adr/0001-x.md"'
+ck "SPEC-0009/8: rename + body edit of accepted ADR fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "renamed from docs/adr/0001-x.md"'
 
-# SPEC-0009/9 — ADR aceito removido → erro
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+# SPEC-0009/9 — deleted accepted ADR → error
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
 rm "$R/docs/adr/0001-x.md"; commit_all delete
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/9: ADR aceito removido falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "foi removido"'
+ck "SPEC-0009/9: removed accepted ADR fails" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "was removed"'
 
-# SPEC-0009/10 — status de ADR aceito não regride (accepted → proposed)
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
-adr_doc "$R/docs/adr/0001-x.md" proposed null "" "Contexto."; commit_all regress
+# SPEC-0009/10 — accepted ADR status cannot regress (accepted → proposed)
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
+adr_doc "$R/docs/adr/0001-x.md" proposed null "" "Context."; commit_all regress
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/10: accepted → proposed falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "regrediu"'
+ck "SPEC-0009/10: accepted → proposed regression fails" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "regressed"'
 
-# SPEC-0009/11 — VERDADE ATUAL só vale no topo e com até 3 linhas
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
-adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto.
+# SPEC-0009/11 + SPEC-0012/3 — CURRENT TRUTH / VERDADE ATUAL valid only at top and <= 3 lines
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context.
 
-> VERDADE ATUAL: na prática decidimos o contrário"
-commit_all meio
+> CURRENT TRUTH: in practice we did the opposite"
+commit_all middle
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/11: VERDADE ATUAL no meio do corpo conta como corpo" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "corpo alterado"'
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
-adr_doc "$R/docs/adr/0001-x.md" accepted null "> VERDADE ATUAL: 1
+ck "SPEC-0009/11 + SPEC-0012/3: CURRENT TRUTH inside body counts as body edit" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "body modified"'
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "> CURRENT TRUTH: 1
 > 2
 > 3
-> 4 — linha além do limite" "Contexto."
-commit_all longo
+> 4 — line beyond cap" "Context."
+commit_all long
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/11: VERDADE ATUAL com mais de 3 linhas falha" '[ "$RC" -ne 0 ]'
+ck "SPEC-0009/11 + SPEC-0012/3: CURRENT TRUTH exceeding 3 lines fails" '[ "$RC" -ne 0 ]'
 
-# SPEC-0009/12 — branch atrás da base: ADR aceito novo na base não vira falso "removido"
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
+# SPEC-0009/12 — branch behind base: newly added ADR on base is not a false deletion
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
 (cd "$R" && git checkout -q -b feat)
 mkdir -p "$R/src"; echo x > "$R/src/a.txt"; commit_all feat
 (cd "$R" && git checkout -q main)
-adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."; commit_all main-avanca
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "New."; commit_all main-advances
 (cd "$R" && git checkout -q feat)
 OUT=$(imm main); RC=$?
-ck "SPEC-0009/12: compara com a merge-base, não com a ponta da base" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/12: compares against merge-base, not tip of base" '[ "$RC" -eq 0 ]'
 
-# SPEC-0009/13 — higiene segue o git: ignorado não reprova; duplicado versionável reprova
+# SPEC-0009/13 — tree hygiene follows git
 mkrepo; gitify
 printf '.DS_Store\n' > "$R/.gitignore"; mkdir -p "$R/src"; : > "$R/src/.DS_Store"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/13: .DS_Store ignorado pelo .gitignore não reprova" '[ "$RC" -eq 0 ]'
-: > "$R/src/notas.md"; : > "$R/src/notas 2.md"
+ck "SPEC-0009/13: .DS_Store ignored by .gitignore passes" '[ "$RC" -eq 0 ]'
+: > "$R/src/notes.md"; : > "$R/src/notes 2.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
-ck "SPEC-0009/13: duplicado não ignorado reprova" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "duplicado de sync"'
+ck "SPEC-0009/13: non-ignored sync duplicate fails" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "sync duplicate"'
 
-# SPEC-0009/14 — --staged valida o INDEX, não a working tree
+# SPEC-0009/14 — --staged validates the git INDEX, not the working tree
 mkrepo; gitify
 mkdir -p "$R/docs/adr"
-printf -- '---\nstatus: banana\n---\nsem h1\n' > "$R/docs/adr/0001-x.md"
+printf -- '---\nstatus: banana\n---\nno h1\n' > "$R/docs/adr/0001-x.md"
 (cd "$R" && git add docs/adr/0001-x.md); rm "$R/docs/adr/0001-x.md"
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/14: doc inválido no index falha mesmo corrigido no disco" \
-   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "status inválido"'
+ck "SPEC-0009/14: invalid doc in index fails even if deleted on disk" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "invalid status"'
 (cd "$R" && git reset -q)
 printf -- '---\nstatus: proposed\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"
 (cd "$R" && python3 "$CHECK" --emit-index >/dev/null && git add -A)
 printf -- '---\nstatus: banana\n---\n' > "$R/docs/adr/0001-x.md"
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/14: index válido passa mesmo com o disco quebrado" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/14: valid index passes even if working tree is broken" '[ "$RC" -eq 0 ]'
 
-# SPEC-0009/25 — --staged valida o que o commit gravaria
+# SPEC-0009/25 — --staged validates the exact tree git write-tree would commit
 mkrepo; gitify
 mv "$R/AGENTS.md" "$R/ROUTER.md"; (cd "$R" && ln -s ROUTER.md AGENTS.md && git add -A)
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/25: AGENTS.md symlink resolvido no index" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/25: symlinked AGENTS.md resolved in index" '[ "$RC" -eq 0 ]'
 mkrepo; mkdir -p "$R/docs/adr"
 printf -- '---\nstatus: proposed\ndate: 2026-01-01\n---\n# X\n' > "$R/docs/adr/0001-x.md"; gitify
 (cd "$R" && git sparse-checkout set --no-cone '/*' '!/docs/' 2>/dev/null)
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/25: sparse-checkout sem docs/ não quebra --staged" '[ "$RC" -eq 0 ] && [ ! -e "$R/docs/adr/0001-x.md" ]'
+ck "SPEC-0009/25: sparse-checkout without docs/ does not break --staged" '[ "$RC" -eq 0 ] && [ ! -e "$R/docs/adr/0001-x.md" ]'
 mkrepo; gitify; mkdir -p "$R/docs/adr"
-printf -- '---\nstatus: banana\n---\nsem h1\n' > "$R/docs/adr/0002-y.md"; (cd "$R" && git add -N docs/adr/0002-y.md)
+printf -- '---\nstatus: banana\n---\nno h1\n' > "$R/docs/adr/0002-y.md"; (cd "$R" && git add -N docs/adr/0002-y.md)
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/25: entrada add -N fica fora do commit validado" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/25: git add -N entry excluded from staged tree" '[ "$RC" -eq 0 ]'
 
-# SPEC-0009/26 — implemented-by olha o index no --staged
-mkrepo; mkdir -p "$R/src"; echo x > "$R/src/so-index.py"
-spec_doc implemented "[src/so-index.py]" "(nenhuma)" "true   # casos 1" "2026-11-18 · true → exit 0"
-gitify; rm "$R/src/so-index.py"
+# SPEC-0009/26 — implemented-by inspects index in --staged mode
+mkrepo; mkdir -p "$R/src"; echo x > "$R/src/index-only.py"
+spec_doc implemented "[src/index-only.py]" "(none)" "true   # case 1" "2026-11-19 · true → exit 0"
+gitify; rm "$R/src/index-only.py"
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/26: path só no index satisfaz implemented-by" '[ "$RC" -eq 0 ]'
-(cd "$R" && git rm -q --cached src/so-index.py); echo x > "$R/src/so-index.py"
+ck "SPEC-0009/26: path present in index satisfies implemented-by" '[ "$RC" -eq 0 ]'
+(cd "$R" && git rm -q --cached src/index-only.py); echo x > "$R/src/index-only.py"
 OUT=$(cd "$R" && python3 "$CHECK" --staged 2>&1); RC=$?
-ck "SPEC-0009/26: path só no disco não satisfaz implemented-by" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "path inexistente"'
+ck "SPEC-0009/26: untracked disk-only path fails implemented-by in --staged" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "non-existent path"'
 
-# SPEC-0009/27 — bloco VERDADE ATUAL longo que já existia na base: tolerado até ser editado
+# SPEC-0009/27 — legacy >3-line VERDADE ATUAL block tolerated until edited
 LONG="> VERDADE ATUAL: 1
 > 2
 > 3
 > 4
 > 5"
-mkrepo; adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."
-adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "$LONG" "Contexto."; gitify
+mkrepo; adr_doc "$R/docs/adr/0002-y.md" accepted null "" "New."
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "$LONG" "Context."; gitify
 OUT=$(python3 "$CHECK" --root "$R" 2>&1)
-ck "SPEC-0009/27: bloco longo existente gera aviso" 'echo "$OUT" | grep -q "AVISO.*VERDADE ATUAL com 5 linhas"'
-adr_doc "$R/docs/adr/0002-y.md" accepted null "" "Nova."; echo >> "$R/docs/adr/0002-y.md"; commit_all toca-outro
+ck "SPEC-0009/27: pre-existing long block emits warning" 'echo "$OUT" | grep -q "WARNING.*has 5 lines"'
+adr_doc "$R/docs/adr/0002-y.md" accepted null "" "New."; echo >> "$R/docs/adr/0002-y.md"; commit_all touch-other
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/27: bloco longo intocado passa" '[ "$RC" -eq 0 ]'
-adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "${LONG/5/5 editada}" "Contexto."; commit_all edita-longo
+ck "SPEC-0009/27: untouched long block passes immutability" '[ "$RC" -eq 0 ]'
+adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "${LONG/5/5 edited}" "Context."; commit_all edit-long
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/27: bloco longo editado sem reduzir falha" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "com 5 linhas"'
+ck "SPEC-0009/27: edited long block without shrinking fails" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "has 5 lines"'
 adr_doc "$R/docs/adr/0001-x.md" superseded ADR-0002 "> VERDADE ATUAL: 1
 > 2
-> 3" "Contexto."; commit_all reduz
+> 3" "Context."; commit_all shrink
 OUT=$(imm HEAD~2); RC=$?
-ck "SPEC-0009/27: bloco longo reduzido a 3 linhas passa" '[ "$RC" -eq 0 ]'
+ck "SPEC-0009/27: long block shrunk to 3 lines passes" '[ "$RC" -eq 0 ]'
 
-# SPEC-0009/28 — repetir o marcador não estende o limite
-mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Contexto."; gitify
-adr_doc "$R/docs/adr/0001-x.md" accepted null "> VERDADE ATUAL: a
+# SPEC-0009/28 — repeating the marker does not bypass the 3-line cap
+mkrepo; adr_doc "$R/docs/adr/0001-x.md" accepted null "" "Context."; gitify
+adr_doc "$R/docs/adr/0001-x.md" accepted null "> CURRENT TRUTH: a
 > b
 > c
-> VERDADE ATUAL: d
+> CURRENT TRUTH: d
 > e
-> f" "Contexto."
-commit_all repete
+> f" "Context."
+commit_all repeat
 OUT=$(imm HEAD~1); RC=$?
-ck "SPEC-0009/28: marcador repetido conta como um bloco só" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "com 6 linhas"'
+ck "SPEC-0009/28: repeated marker counts as a single 6-line block" '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "has 6 lines"'
+
+# --- SPEC-0012: bilingual EN + legacy PT-BR marker compatibility (ADR-0019) ---
+
+# SPEC-0012/1 — English Verification placeholder is rejected when implemented
+mkrepo; echo x > "$R/impl.py"
+spec_doc implemented "[impl.py]" "(none)" "true" "(fill in on close)"
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0012/1: implemented Spec with '(fill in on close)' fails" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Verification still contains template placeholder"'
+
+# SPEC-0012/2 — Full legacy Portuguese repository (CASA 1.0–1.10 markers) passes cleanly
+R="$(mktemp -d)"
+mkdir -p "$R/docs/adr" "$R/docs/specs"
+cat > "$R/AGENTS.md" <<EOF
+# AGENTS.md
+
+\`\`\`yaml
+casa-repo-id: legado-pt
+casa-tier: T1
+casa-version: $DC_V
+casa-standard-ref: test
+\`\`\`
+
+## Como validar (DoD global do repo)
+
+\`\`\`bash
+python3 scripts/docs-check
+\`\`\`
+
+## Mapa de contexto
+
+| Capítulo | Quando carregar |
+|---|---|
+| (nenhum ainda) | — |
+EOF
+echo ok > "$R/app.py"
+adr_doc "$R/docs/adr/0002-novo.md" accepted null "" "Nova decisão PT."
+adr_doc "$R/docs/adr/0001-antigo.md" superseded ADR-0002 "> ⚠️ VERDADE ATUAL: substituído por ADR-0002" "Decisão antiga PT."
+cat > "$R/docs/specs/0001-pt.md" <<'EOF'
+---
+status: implemented
+date: 2026-06-13
+builds-on: [ADR-0002]
+implemented-by: [app.py]
+---
+
+# Comportamento em português
+
+## Questões em aberto
+
+(nenhuma)
+
+## Definition of Done
+
+```bash
+python3 -c "print('ok')"   # exit 0
+```
+
+## Verificação
+
+```text
+2026-06-13 · python3 -c "print('ok')" → exit 0
+```
+EOF
+python3 "$CHECK" --root "$R" --emit-index >/dev/null
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0012/2: legacy PT-BR router, VERDADE ATUAL, Questões em aberto, and Verificação pass" \
+   '[ "$RC" -eq 0 ]'
+
+# Legacy PT-BR placeholder '(preencher no fechamento)' still fails when implemented
+sed -i 's/2026-06-13.*/(preencher no fechamento)/' "$R/docs/specs/0001-pt.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0012/2b: legacy PT-BR '(preencher no fechamento)' still fails when implemented" \
+   '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Verification still contains template placeholder"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="
