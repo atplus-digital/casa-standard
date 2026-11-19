@@ -5,8 +5,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh
 #   curl -fsSL .../install.sh | sh -s -- <target> [--repo-id NAME] [--tier T0|T1]
 #
-# Pinning:            CASA_REF=v1.0.0 (tag or sha) — downloads and stamps that ref. In a pipe,
-#                     pass the variable to sh: curl … | CASA_REF=v1.0.0 sh -s -- <target>
+# Pinning:            CASA_REF=v1.11.0 (tag or sha) — downloads and stamps that ref. In a pipe,
+#                     pass the variable to sh: curl … | CASA_REF=v1.11.0 sh -s -- <target>
 # Offline (tests):    CASA_TARBALL=/path/to/casa.tgz
 # Auditing: prefer downloading, inspecting, and running locally. This script writes ONLY to
 # a temporary mktemp directory (cleaned up on exit) and to the target via casa-init; no sudo,
