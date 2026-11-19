@@ -7,6 +7,9 @@
 
   const rootEl = document.documentElement;
   const siteRoot = rootEl.getAttribute("data-site-root") || "./";
+  const isPt = (rootEl.getAttribute("lang") || "").toLowerCase().indexOf("pt") === 0;
+  const searchIndexPath =
+    rootEl.getAttribute("data-search-index") || (siteRoot + "assets/search-index.en.json");
 
   // 1. Theme Toggle (persisted in localStorage, synced with system default)
   const themeBtn = document.getElementById("theme-toggle-btn");
@@ -45,7 +48,7 @@
     navigator.clipboard.writeText(text.trim()).then(function () {
       const prev = btn.textContent;
       btn.setAttribute("data-copied", "true");
-      btn.textContent = "Copiado";
+      btn.textContent = isPt ? "Copiado" : "Copied";
       window.setTimeout(function () {
         btn.removeAttribute("data-copied");
         btn.textContent = prev;
@@ -114,7 +117,7 @@
     map.forEach(function (_, sec) { obs.observe(sec); });
   }
 
-  // 7. Graph Explorer Filtering & Interactive Causal SVG (/grafo/)
+  // 7. Graph Explorer Filtering & Interactive Causal SVG (/graph/ & /pt/grafo/)
   const graphTable = document.getElementById("graph-ledger-body");
   if (graphTable) {
     const rows = Array.from(graphTable.querySelectorAll("tr[data-doc-id]"));
@@ -143,7 +146,7 @@
         if (show) visible += 1;
       });
       if (emptyState) emptyState.hidden = visible > 0;
-      if (countLabel) countLabel.textContent = visible + " documento(s)";
+      if (countLabel) countLabel.textContent = visible + (isPt ? " documento(s)" : " document(s)");
     }
 
     layerBtns.forEach(function (btn) {
@@ -249,7 +252,7 @@
 
   function loadSearchIndex() {
     if (searchIndex) return Promise.resolve(searchIndex);
-    return fetch(siteRoot + "assets/search-index.json")
+    return fetch(searchIndexPath)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         searchIndex = data;

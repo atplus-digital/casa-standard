@@ -27,27 +27,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configurar Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Configurar GitHub Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Validar docs e suíte do site (SPEC-0011)
+      - name: Validate docs and bilingual site suite (SPEC-0011, SPEC-0012)
         run: |
           python3 scripts/docs-check
           scripts/test-site
 
-      - name: Compilar site estático das fontes canônicas
+      - name: Build bilingual static site from canonical sources
         run: python3 scripts/build-site --out _site --base-url https://atplus-digital.github.io/casa-standard/
 
-      - name: Enviar artefato do Pages
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
-      - name: Publicar no GitHub Pages
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

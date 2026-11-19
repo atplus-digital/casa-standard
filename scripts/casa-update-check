@@ -1,82 +1,82 @@
 #!/bin/sh
-# casa-update-check — compara o contrato CASA declarado no router com o vigente na
-# origem e mantém UMA issue de aviso no tracker do repo (ADR-0016, SPEC-0008).
+# casa-update-check — compares the CASA contract declared in the router against
+# upstream and maintains ONE notice issue in the repo tracker (ADR-0016, SPEC-0008).
 #
-# Roda AGENDADO no CI do host (workflow casa-update-check.yml) — nunca no gate:
-# rede aqui é aceitável e falha aqui nunca bloqueia ninguém (exit 0 sempre que o
-# mundo externo falhar; quem cobra a integridade do router é o docs-check).
+# Runs SCHEDULED in host CI (casa-update-check.yml workflow) — never inside the gate:
+# network calls are acceptable here and external failures never block anyone (exits 0
+# whenever external I/O fails; router integrity belongs to docs-check).
 #
-# Uso: sh scripts/casa-update-check [root]
-# Requer: curl e gh autenticado (GITHUB_TOKEN no Actions). Fonte da versão vigente
-# sobrescrevível por CASA_SOURCE_URL (teste/fork).
+# Usage: sh scripts/casa-update-check [root]
+# Requires: curl and authenticated gh (GITHUB_TOKEN on Actions). Upstream changelog URL
+# can be overridden via CASA_SOURCE_URL (tests/forks).
 set -u
 ROOT="${1:-.}"
 LABEL="casa-update"
 SOURCE_URL="${CASA_SOURCE_URL:-https://raw.githubusercontent.com/atplus-digital/casa-standard/main/CHANGELOG.md}"
 
-[ -d "$ROOT" ] || { echo "casa-update-check: root inexistente: $ROOT"; exit 2; }
-# O gh descobre o repositório pelo checkout do diretório corrente: opera SEMPRE no root
-# lido — nunca no checkout de onde o comando foi chamado.
+[ -d "$ROOT" ] || { echo "casa-update-check: non-existent root: $ROOT"; exit 2; }
+# gh resolves the target repository from the current working directory: ALWAYS cd into
+# the inspected root — never operate on the caller's checkout.
 cd "$ROOT" || exit 2
 
 declared=$(sed -n 's/^casa-version: *\([0-9][0-9.]*\).*/\1/p' AGENTS.md 2>/dev/null | head -1)
 if [ -z "$declared" ]; then
-    echo "casa-version ilegível em AGENTS.md — o docs-check é quem cobra o router; nada a fazer."
+    echo "casa-version unreadable in AGENTS.md — docs-check enforces router validity; nothing to do."
     exit 0
 fi
 
 latest=$(curl -fsSL --max-time 20 "$SOURCE_URL" 2>/dev/null | sed -n 's/^## CASA \([0-9][0-9.]*\).*/\1/p' | head -1)
 if [ -z "$latest" ]; then
-    echo "não consegui ler a versão vigente em $SOURCE_URL — tento na próxima janela."
+    echo "could not read upstream CASA version from $SOURCE_URL — will retry on next schedule."
     exit 0
 fi
 
-echo "contrato declarado: $declared · vigente: $latest"
+echo "declared contract: $declared · upstream: $latest"
 newer=$(printf '%s\n%s\n' "$declared" "$latest" | sort -V | tail -1)
 
 if [ "$declared" = "$latest" ] || [ "$newer" = "$declared" ]; then
-    # em dia (ou à frente — julgar não é papel deste job): fecha aviso aberto, se houver
+    # up to date (or ahead — judging that is not this job's role): close any open notice
     open_issues=$(gh issue list --label "$LABEL" --state open --json number --jq '.[].number' 2>/dev/null) || {
-        echo "não consegui consultar as issues '$LABEL' (gh autenticado? issues habilitadas?) — tento na próxima janela."
+        echo "could not query '$LABEL' issues (is gh authenticated? are issues enabled?) — will retry on next schedule."
         exit 0
     }
     for n in $open_issues; do
-        if gh issue close "$n" --comment "Contrato em dia ($declared). Fechado pelo casa-update-check." >/dev/null 2>&1; then
-            echo "issue #$n fechada (repo alcançou o contrato vigente)."
+        if gh issue close "$n" --comment "CASA contract up to date ($declared). Closed automatically by casa-update-check." >/dev/null 2>&1; then
+            echo "closed issue #$n (repo caught up with upstream contract)."
         else
-            echo "falha ao fechar a issue #$n — tento na próxima janela."
+            echo "failed to close issue #$n — will retry on next schedule."
         fi
     done
-    echo "em dia."
+    echo "up to date."
     exit 0
 fi
 
-TITLE="CASA desatualizado: declarado $declared, vigente $latest"
-BODY="O contrato CASA vigente é **$latest** e este repo declara **casa-version: $declared**.
+TITLE="CASA contract outdated: declared $declared, upstream $latest"
+BODY="The current upstream CASA contract is **$latest**, while this repository declares **casa-version: $declared**.
 
-1. Atualize a toolchain: \`scripts/casa-init <este-repo>\` de um clone atual do casa-standard — ou, sem clone, \`curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh\`.
-2. Leia o \`CHANGELOG.md\` do casa-standard entre $declared e $latest.
-3. Quando o repo cumprir o contrato novo, atualize \`casa-version\` no \`AGENTS.md\` — a declaração é promessa do repo e o casa-init não a toca (ADR-0010); até lá o docs-check avisa a diferença.
+1. Update the toolchain: run \`scripts/casa-init <this-repo>\` from a current clone of \`casa-standard\` — or without cloning: \`curl -fsSL https://raw.githubusercontent.com/atplus-digital/casa-standard/main/install.sh | sh\`.
+2. Read the \`casa-standard\` \`CHANGELOG.md\` entries between $declared and $latest.
+3. Once this repository satisfies the new contract, bump \`casa-version\` in \`AGENTS.md\` — the declaration is the repository's own promise and \`casa-init\` never alters it (ADR-0010); until then, \`docs-check\` emits a warning.
 
-_Aviso automático do casa-update-check (ADR-0016 do casa-standard). Esta issue é editada enquanto o repo estiver atrás e fecha sozinha quando alcançar._"
+_Automated notice from \`casa-update-check\` (casa-standard ADR-0016). This issue is updated in place while behind and closes automatically once caught up._"
 
-gh label create "$LABEL" --color BFD4F2 --description "aviso automático do casa-update-check (ADR-0016)" 2>/dev/null || true
-# Falha na consulta NÃO é "nenhuma issue": criar às cegas duplicaria o aviso.
+gh label create "$LABEL" --color BFD4F2 --description "automated notice from casa-update-check (ADR-0016)" 2>/dev/null || true
+# A failed query is NOT "zero open issues": creating blindly would duplicate notices.
 existing=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number' 2>/dev/null) || {
-    echo "não consegui consultar as issues '$LABEL' (gh autenticado? issues habilitadas?) — não crio às cegas; tento na próxima janela."
+    echo "could not query '$LABEL' issues (is gh authenticated? are issues enabled?) — refusing to create blindly; will retry on next schedule."
     exit 0
 }
 if [ -n "$existing" ]; then
     if gh issue edit "$existing" --title "$TITLE" --body "$BODY" >/dev/null 2>&1; then
-        echo "issue #$existing atualizada: $TITLE"
+        echo "updated issue #$existing: $TITLE"
     else
-        echo "falha ao editar a issue #$existing (permissão issues: write?) — tento na próxima janela."
+        echo "failed to edit issue #$existing (missing issues: write permission?) — will retry on next schedule."
     fi
 else
     if gh issue create --title "$TITLE" --body "$BODY" --label "$LABEL" >/dev/null 2>&1; then
-        echo "issue criada: $TITLE"
+        echo "created issue: $TITLE"
     else
-        echo "falha ao criar a issue (permissão issues: write? issues habilitadas?) — tento na próxima janela."
+        echo "failed to create issue (missing issues: write permission? issues disabled?) — will retry on next schedule."
     fi
 fi
 exit 0

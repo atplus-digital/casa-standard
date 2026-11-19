@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0002 (install.sh). DoD: exit 0 = todos verdes. Roda SEM rede:
-# os tarballs vêm da working tree (cobre mudanças ainda não commitadas).
+# Scenarios for SPEC-0002 (install.sh). DoD: exit 0 = all green. Runs OFFLINE:
+# tarballs are built from the local working tree (covering uncommitted changes).
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SH="$ROOT/install.sh"
-# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
+# Isolate host git config (global core.hooksPath, etc.) so tests stay deterministic.
 GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
 W="$(mktemp -d)"
+trap 'rm -rf "$W"' EXIT
 TB_FLAT="$W/flat.tgz"
 tar -czf "$TB_FLAT" --exclude .git -C "$ROOT" scripts docs
 STAGE="$W/stage"; mkdir -p "$STAGE/casa-standard-abc1234"
@@ -17,49 +18,47 @@ tar -cf - --exclude .git -C "$ROOT" scripts docs | tar -xf - -C "$STAGE/casa-sta
 TB_PREFIX="$W/prefix.tgz"
 tar -czf "$TB_PREFIX" -C "$STAGE" casa-standard-abc1234
 
-# EARS 7 + 2 — tarball local, destino e flags repassados
+# EARS 7 + 2 — local tarball, target and flags forwarded intact
 A="$W/a"
 CASA_TARBALL="$TB_FLAT" sh "$SH" "$A" --repo-id app-via-curl >/dev/null 2>&1
-ck "EARS-7: bootstrap via tarball local, sem rede"      '[ -f "$A/AGENTS.md" ]'
-ck "EARS-2: flags repassadas intactas ao casa-init"     'grep -q "casa-repo-id: app-via-curl" "$A/AGENTS.md"'
-ck "destino bootstrapado passa o docs-check"            '(cd "$A" && python3 scripts/docs-check)'
+ck "EARS-7: bootstrap via local tarball, offline"      '[ -f "$A/AGENTS.md" ]'
+ck "EARS-2: flags forwarded intact to casa-init"       'grep -q "casa-repo-id: app-via-curl" "$A/AGENTS.md"'
+ck "bootstrapped target passes docs-check"             '(cd "$A" && python3 scripts/docs-check)'
 
-# EARS 6 — ref pinado vira o carimbo do router
+# EARS 6 — pinned ref becomes router stamp
 B="$W/b"
-CASA_TARBALL="$TB_FLAT" CASA_REF=v9.9.9-teste sh "$SH" "$B" >/dev/null 2>&1
-ck "EARS-6: CASA_REF carimbado no router"               'grep -q "casa-standard-ref: v9.9.9-teste" "$B/AGENTS.md"'
+CASA_TARBALL="$TB_FLAT" CASA_REF=v9.9.9-test sh "$SH" "$B" >/dev/null 2>&1
+ck "EARS-6: CASA_REF stamped in router"                'grep -q "casa-standard-ref: v9.9.9-test" "$B/AGENTS.md"'
 
-# EARS 8 — formato codeload (diretório-prefixo)
+# EARS 8 — codeload format (top-level directory prefix)
 C="$W/c"
 CASA_TARBALL="$TB_PREFIX" sh "$SH" "$C" >/dev/null 2>&1
-ck "EARS-8: tarball com diretório-prefixo funciona"     '[ -f "$C/AGENTS.md" ]'
+ck "EARS-8: prefixed-directory tarball works"          '[ -f "$C/AGENTS.md" ]'
 
-# EARS 1 — sem argumentos → diretório corrente
+# EARS 1 — no arguments → current working directory
 D="$W/d"; mkdir -p "$D"
 (cd "$D" && CASA_TARBALL="$TB_FLAT" sh "$SH" >/dev/null 2>&1)
-ck "EARS-1: sem argumentos aplica no PWD"               '[ -f "$D/AGENTS.md" ]'
+ck "EARS-1: no arguments targets PWD"                  '[ -f "$D/AGENTS.md" ]'
 
-# EARS 3 — só flags → diretório corrente como destino
+# EARS 3 — flags only → current working directory as target
 E="$W/e"; mkdir -p "$E"
-(cd "$E" && CASA_TARBALL="$TB_FLAT" sh "$SH" --repo-id soflags >/dev/null 2>&1)
-ck "EARS-3: só flags assume PWD como destino"           'grep -q "casa-repo-id: soflags" "$E/AGENTS.md"'
+(cd "$E" && CASA_TARBALL="$TB_FLAT" sh "$SH" --repo-id flags-only >/dev/null 2>&1)
+ck "EARS-3: flags only assumes PWD as target"          'grep -q "casa-repo-id: flags-only" "$E/AGENTS.md"'
 
-# EARS 4 — sem python3: falha clara antes de escrever qualquer coisa
-# sh por caminho absoluto + PATH vazio: não depende de symlink de sh (não roda
-# no Windows/Git Bash) e o `command -v python3` do install.sh só vê o dir vazio.
+# EARS 4 — missing python3: clear failure before writing anything
 F="$W/f"; mkdir -p "$F"
 EMPTYBIN="$W/bin"; mkdir -p "$EMPTYBIN"
 OUT=$( (cd "$F" && env PATH="$EMPTYBIN" CASA_TARBALL="$TB_FLAT" "$(command -v sh)" "$SH" 2>&1); echo "rc=$?" )
-ck "EARS-4: sem python3 falha com mensagem clara"       'echo "$OUT" | grep -q "python3" && echo "$OUT" | grep -q "rc=1"'
-ck "EARS-4: nada escrito no destino"                    '[ ! -e "$F/AGENTS.md" ]'
+ck "EARS-4: missing python3 fails with clear message"  'echo "$OUT" | grep -q "python3" && echo "$OUT" | grep -q "rc=1"'
+ck "EARS-4: nothing written to target"                 '[ ! -e "$F/AGENTS.md" ]'
 
-# EARS 5 — proteção estrutural contra download truncado
-ck "EARS-5: corpo em main(), chamada na última linha"   '[ "$(tail -1 "$SH")" = "main \"\$@\"" ]'
-ck "sintaxe POSIX sh válida (sh -n)"                    'sh -n "$SH"'
+# EARS 5 — structural guard against truncated downloads
+ck "EARS-5: body inside main(), invoked on last line"  '[ "$(tail -1 "$SH")" = "main \"\$@\"" ]'
+ck "valid POSIX sh syntax (sh -n)"                     'sh -n "$SH"'
 
-# SPEC-0009/21 — a pinagem documentada passa CASA_REF ao sh (prefixada ao curl, não chega)
-ck "SPEC-0009/21: README pina com | CASA_REF=… sh"   'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/README.md"'
-ck "SPEC-0009/21: STANDARD pina com | CASA_REF=… sh" 'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/STANDARD.md"'
+# SPEC-0009/21 — documented pinning passes CASA_REF to sh (prefixing curl never reaches sh)
+ck "SPEC-0009/21: README pins with | CASA_REF=… sh"    'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/README.md"'
+ck "SPEC-0009/21: STANDARD pins with | CASA_REF=… sh"  'grep -q "| CASA_REF=<tag|sha> sh -s --" "$ROOT/STANDARD.md"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

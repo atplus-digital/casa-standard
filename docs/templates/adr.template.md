@@ -1,58 +1,58 @@
 ---
 status: proposed            # proposed | accepted | deprecated | superseded
-date: AAAA-MM-DD
-builds-on: []               # ADRs relacionados: ADR-NNNN ou repo:ADR-NNNN
-superseded-by: null         # escalar; preenchido no ADR antigo no commit que aceita o novo
+date: YYYY-MM-DD
+builds-on: []               # upstream ADRs: ADR-NNNN or repo:ADR-NNNN
+superseded-by: null         # scalar; set on the old ADR in the commit that accepts the new one
 deciders: []
 ---
 
-<!-- id é DERIVADO do filename (docs/adr/NNNN-titulo-kebab.md → ADR-NNNN);
-     title é DERIVADO do H1 abaixo. Não existem no frontmatter de propósito.
+<!-- id is DERIVED from the filename (docs/adr/NNNN-kebab-title.md → ADR-NNNN);
+     title is DERIVED from the H1 below. Neither exists in frontmatter on purpose.
 
-     ⚠️ Bloco VERDADE ATUAL — obrigatório quando este ADR for superado.
-     Única edição substantiva permitida em ADR aceito. Máximo 3 linhas:
+     ⚠️ CURRENT TRUTH callout — required when this ADR is superseded.
+     Only substantive edit permitted on an accepted ADR. Max 3 lines:
 
-> ⚠️ VERDADE ATUAL: <o que ainda vale; o que foi revogado; ADR fonte atual>
+> ⚠️ CURRENT TRUTH: <what still holds; what was revoked; current source ADR>
 -->
 
-# <título da decisão, voz ativa — vira o title derivado>
+# <decision title in active voice — becomes the derived title>
 
-## Contexto e problema
-<!-- Que situação força uma decisão? Por que agora?
-     ⚠️ DECISÃO ≠ ESTADO ATUAL: este doc registra a decisão datada.
-     O estado atual decorrente vive em docs/context/ e aponta para cá. -->
+## Context and Problem
+<!-- What situation forces a decision? Why now?
+     ⚠️ DECISION ≠ CURRENT STATE: this document records the dated decision.
+     Resulting current state lives in docs/context/ and points back here. -->
 
-## Direcionadores da decisão
-<!-- Forças em jogo: requisitos, restrições, custo, prazo, risco. -->
+## Decision Drivers
+<!-- Forces at play: requirements, constraints, cost, timeline, risk. -->
 
-## Opções consideradas
+## Considered Options
 
-### Opção 1 — <nome>
-**Prós:**
-**Contras:**
+### Option 1 — <name>
+**Pros:**
+**Cons:**
 
-### Opção 2 — <nome>
-**Prós:**
-**Contras:**
+### Option 2 — <name>
+**Pros:**
+**Cons:**
 
-## Decisão
-<!-- A escolha em uma frase + justificativa em um parágrafo.
-     Backend integrável? Posicione no eixo comum: acoplamento da escrita ×
-     tratamento de falha parcial (síncrono+compensação vs. assíncrono+reconciler). -->
+## Decision
+<!-- The choice in one sentence + rationale in one paragraph.
+     Integrable backend? Place it on the common axis: write coupling ×
+     partial-failure handling (synchronous+compensation vs. asynchronous+reconciler). -->
 
-## Consequências
-<!-- Positivas, negativas, e o que passa a ser proibido/obrigatório. -->
+## Consequences
+<!-- Positive, negative, and what becomes forbidden or mandatory. -->
 
-## Confirmação
-<!-- Como verificar que a decisão está sendo respeitada NA PRÁTICA:
-     comando, query, inspeção. É o loop do agente para esta decisão. -->
+## Confirmation
+<!-- How to verify the decision is respected IN PRACTICE:
+     command, query, inspection. Closes the agent loop for this decision. -->
 
 ```bash
-# ex.: grep -r "supabase functions deploy" scripts/ && exit 1   # ninguém burla o sbx
+# e.g.: grep -r "supabase functions deploy" scripts/ && exit 1   # nobody bypasses sbx
 ```
 
-## Notas
-<!-- ⚠️ Não inventar: decisão de negócio não tomada → issue tracker, não ADR.
-     Critério mecânico: em ADR já aceito só frontmatter e o bloco VERDADE ATUAL
-     mudam (lint de imutabilidade, STANDARD §8). Qualquer mudança de corpo —
-     inclusive typo/link → ADR novo que supersede. -->
+## Notes
+<!-- ⚠️ Do not invent: unmade business decisions go to the issue tracker, not an ADR.
+     Mechanical rule: on an accepted ADR only frontmatter and the top CURRENT TRUTH
+     callout may change (immutability lint, STANDARD §8). Any body edit —
+     including typos or links — requires a new ADR that supersedes this one. -->

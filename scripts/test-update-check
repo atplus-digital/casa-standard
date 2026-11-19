@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# Cenários da SPEC-0008 (casa-update-check), com stubs de curl/gh. DoD: exit 0.
+# Scenarios for SPEC-0008 (casa-update-check), using curl/gh stubs. DoD: exit 0.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UC="$ROOT/scripts/casa-update-check"
-# Isola a config git da máquina (core.hooksPath global etc.) — o teste não depende dela.
 GIT_CONFIG_GLOBAL=/dev/null; GIT_CONFIG_NOSYSTEM=1; export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
 pass=0; fail=0
 ck() { if eval "$2" >/dev/null 2>&1; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL: $1"; fail=$((fail+1)); fi; }
 
-# Stubs: gh registra chamadas em GH_LOG e devolve GH_LIST no "issue list";
-# curl devolve CURL_FILE ou falha com CURL_FAIL=1. Rede de verdade nunca é tocada.
 STUB="$(mktemp -d)"
 cat > "$STUB/gh" <<'EOF'
 #!/bin/sh
@@ -29,71 +26,71 @@ chmod +x "$STUB/gh" "$STUB/curl"
 PATH="$STUB:$PATH"; export PATH
 
 CHANGELOG="$STUB/changelog.md"
-printf '# Changelog\n\n## CASA 9.9 — 2099-01-01\n\n- coisas\n\n## CASA 9.8 — 2098-01-01\n' > "$CHANGELOG"
+printf '# Changelog\n\n## CASA 9.9 — 2099-01-01\n\n- notes\n\n## CASA 9.8 — 2098-01-01\n' > "$CHANGELOG"
 CASA_SOURCE_URL="stub://changelog"; CURL_FILE="$CHANGELOG"
 export CASA_SOURCE_URL CURL_FILE
 
-mkrepo() { # $1 = casa-version declarado
+mkrepo() {
     R="$(mktemp -d)"
     printf '# AGENTS.md\n\n```yaml\ncasa-repo-id: t\ncasa-tier: T1\ncasa-version: %s\ncasa-standard-ref: x\n```\n' "$1" > "$R/AGENTS.md"
     GH_LOG="$R/gh.log"; : > "$GH_LOG"; export GH_LOG
     GH_LIST="/dev/null"; export GH_LIST
 }
 
-# SPEC-0008/1 — declarado atrás do vigente → cria issue com as duas versões
+# SPEC-0008/1 — declared behind upstream → creates issue with both versions
 mkrepo 1.1
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/1: atrás cria issue"                 '[ "$RC" -eq 0 ] && grep -q "issue create" "$GH_LOG"'
-ck "SPEC-0008/1: título com as duas versões"       'grep -q "declarado 1.1, vigente 9.9" "$GH_LOG"'
+ck "SPEC-0008/1: behind upstream creates issue"    '[ "$RC" -eq 0 ] && grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0008/1: title contains both versions"     'grep -q "declared 1.1, upstream 9.9" "$GH_LOG"'
 
-# SPEC-0008/2 — issue já aberta → edita, nunca duplica
+# SPEC-0008/2 — open issue already exists → edits in place, never duplicates
 mkrepo 1.1
 printf '42\n' > "$STUB/list"; GH_LIST="$STUB/list"; export GH_LIST
 sh "$UC" "$R" >/dev/null 2>&1
-ck "SPEC-0008/2: issue existente é editada"        'grep -q "issue edit 42" "$GH_LOG"'
-ck "SPEC-0008/2: e nenhuma nova é criada"          '! grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0008/2: existing issue edited"            'grep -q "issue edit 42" "$GH_LOG"'
+ck "SPEC-0008/2: no duplicate issue created"       '! grep -q "issue create" "$GH_LOG"'
 
-# SPEC-0008/3 — em dia → não cria nada e fecha aviso aberto
+# SPEC-0008/3 — caught up → closes open notice
 mkrepo 9.9
 printf '7\n' > "$STUB/list"; GH_LIST="$STUB/list"; export GH_LIST
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/3: em dia fecha o aviso aberto"      '[ "$RC" -eq 0 ] && grep -q "issue close 7" "$GH_LOG"'
-ck "SPEC-0008/3: e não cria issue"                 '! grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0008/3: caught up closes open notice"     '[ "$RC" -eq 0 ] && grep -q "issue close 7" "$GH_LOG"'
+ck "SPEC-0008/3: and creates no new issue"         '! grep -q "issue create" "$GH_LOG"'
 
-# SPEC-0008/3b — em dia sem aviso aberto → nenhuma ação de issue
+# SPEC-0008/3b — caught up with no open notice → touches no issues
 mkrepo 9.9
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/3b: em dia sem aviso não toca issues" '[ "$RC" -eq 0 ] && ! grep -qE "issue (create|edit|close)" "$GH_LOG"'
+ck "SPEC-0008/3b: caught up without notice touches no issues" '[ "$RC" -eq 0 ] && ! grep -qE "issue (create|edit|close)" "$GH_LOG"'
 
-# SPEC-0008/4 — rede indisponível → exit 0, sem tocar issues, log honesto
+# SPEC-0008/4 — network failure → exits 0, touches no issues, logs clearly
 mkrepo 1.1
 OUT=$(CURL_FAIL=1 sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/4: rede fora sai 0"                  '[ "$RC" -eq 0 ]'
-ck "SPEC-0008/4: loga e não toca issues"           'echo "$OUT" | grep -q "não consegui" && ! grep -q "issue" "$GH_LOG"'
+ck "SPEC-0008/4: network failure exits 0"          '[ "$RC" -eq 0 ]'
+ck "SPEC-0008/4: logs and touches no issues"       'echo "$OUT" | grep -q "could not read" && ! grep -q "issue" "$GH_LOG"'
 
-# SPEC-0008/5 — casa-version ilegível → exit 0 (quem cobra o router é o docs-check)
-R="$(mktemp -d)"; printf '# AGENTS.md\nsem yaml\n' > "$R/AGENTS.md"
+# SPEC-0008/5 — unreadable casa-version → exits 0
+R="$(mktemp -d)"; printf '# AGENTS.md\nno yaml\n' > "$R/AGENTS.md"
 GH_LOG="$R/gh.log"; : > "$GH_LOG"; export GH_LOG
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/5: router ilegível sai 0 com log"    '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "ilegível"'
+ck "SPEC-0008/5: unreadable router exits 0 with log" '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "unreadable"'
 
-# SPEC-0008/6 — declarado à frente do vigente → tratado como em dia
+# SPEC-0008/6 — declared ahead of upstream → treated as up to date
 mkrepo 99.9
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0008/6: à frente não cria issue"          '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0008/6: ahead of upstream creates no issue" '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
 
-# SPEC-0009/20 — falha ao consultar issues não é "nenhuma issue": não cria duplicata
+# SPEC-0009/20 — failed gh query is NOT "zero open issues": never creates duplicate
 mkrepo 1.1
 GH_LIST_FAIL=1; export GH_LIST_FAIL
 OUT=$(sh "$UC" "$R" 2>&1); RC=$?
-ck "SPEC-0009/20: consulta falha → não cria issue" '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
-ck "SPEC-0009/20: consulta falha → log explica"   'echo "$OUT" | grep -q "não consegui consultar"'
+ck "SPEC-0009/20: failed query creates no issue"   '[ "$RC" -eq 0 ] && ! grep -q "issue create" "$GH_LOG"'
+ck "SPEC-0009/20: failed query logs reason"        'echo "$OUT" | grep -q "could not query"'
 unset GH_LIST_FAIL
 
-# SPEC-0009/20b — gh opera no root informado, não no diretório de quem chamou
+# SPEC-0009/20b — gh runs inside the inspected root, not caller's CWD
 mkrepo 1.1
 OUT=$(cd "$(mktemp -d)" && sh "$UC" "$R" 2>&1)
-ck "SPEC-0009/20b: gh roda no root lido"          'grep -q "^cwd=$R$" "$GH_LOG"'
+ck "SPEC-0009/20b: gh operates in target root"     'grep -q "^cwd=$R$" "$GH_LOG"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

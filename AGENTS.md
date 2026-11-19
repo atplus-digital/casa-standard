@@ -3,84 +3,84 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.10
+casa-version: 1.11
 casa-standard-ref: self
 ```
 
-> ROUTER (CASA §4): carga sempre, teto ~150 linhas. Só alto-ROI transversal.
-> Este repo É a referência do CASA Standard — ele segue o próprio padrão.
+> ROUTER (CASA §4): always loaded, ~150-line cap. Cross-cutting high-ROI only.
+> This repository IS the CASA Standard reference — it dogfoods its own rules.
 
-## Contexto em 5 linhas
+## Context in 5 lines
 
-Este repo é a fonte da verdade do **CASA Standard** (Contexto, ADRs, Specs, Automação),
-o padrão de workflow de desenvolvimento orientado a agentes da atplus-digital. Contém o
-documento normativo (`STANDARD.md`), os templates oficiais (`docs/templates/`) e a
-implementação de referência do validador (`scripts/docs-check`, Python sem dependências).
-Não há aplicação para rodar — o "produto" é a doc + o script.
+This repo is the canonical source of truth for the **CASA Standard** (Context, ADRs, Specs,
+Automation), the agent-first engineering workflow standard by `atplus-digital`. It houses the
+normative specification (`STANDARD.md`), official templates (`docs/templates/`), zero-dependency
+Python 3 reference toolchain (`scripts/*`, `install.sh`), and bilingual static site builder
+(`scripts/build-site`, `site/`). There is no runtime service — the product is the spec + tools.
 
-## Como validar (DoD global do repo)
+## How to validate (global repo DoD)
 
 ```bash
-python3 scripts/docs-check          # exit 0; mesmo comando do CI
-bash scripts/test-docs-check        # exit 0; cenários do validador (SPEC-0003)
-scripts/test-casa-init              # exit 0; cenários do bootstrap (SPEC-0001)
-scripts/test-docs-reserve           # exit 0; cenários da reserva (SPEC-0007)
-scripts/test-update-check           # exit 0; cenários do update-check (SPEC-0008)
-scripts/test-install                # exit 0; cenários do instalador curl|sh (SPEC-0002)
-scripts/test-site                   # exit 0; cenários do gerador do site (SPEC-0011)
+python3 scripts/docs-check          # exit 0; exact CI gate
+bash scripts/test-docs-check        # exit 0; validator scenarios (SPEC-0003..0009, 0012)
+scripts/test-casa-init              # exit 0; bootstrap scenarios (SPEC-0001, 0009, 0010)
+scripts/test-docs-reserve           # exit 0; reservation scenarios (SPEC-0007, 0012)
+scripts/test-update-check           # exit 0; update-check scenarios (SPEC-0008)
+scripts/test-install                # exit 0; curl|sh installer scenarios (SPEC-0002)
+scripts/test-site                   # exit 0; bilingual site & i18n parity scenarios (SPEC-0011, 0012)
 ```
 
 ## Git & PRs
 
-Fluxo de contribuição (issue → branch `<tipo>/<issue>` → PR com `Closes #NNN`): `CONTRIBUTING.md`.
-Mudança no padrão é PR com conversa (STANDARD §10). `STANDARD.md` é normativo: alterou o
-comportamento do `docs-check`, atualize a §8 no mesmo PR — doc e código não divergem.
+Contribution flow (issue → `<type>/<issue>-slug` branch → PR with `Closes #NNN`): `CONTRIBUTING.md`.
+Normative changes require a PR with discussion (STANDARD §10). `STANDARD.md` is normative: if you
+change `docs-check` behavior, update §8 (and `site/i18n/pt/STANDARD.md`) in the same PR.
 
 ## Gotchas
 
-<!-- Conhecimento NÃO-INFERÍVEL que já custou tentativas falhas. -->
+<!-- NON-INFERABLE knowledge that already cost failed attempts. -->
 
-- O `docs-check` aceita só um **subconjunto** de YAML no frontmatter (escalar, lista inline,
-  lista em bloco). Sintaxe fora disso é ERRO proposital, não silêncio — ver STANDARD §6.
-- O router (`AGENTS.md`) também é validado: metadados CASA, DoD global e ponteiros de
-  contexto precisam estar íntegros.
-- A resolução de ponteiro varre o router INTEIRO (fora de comentário HTML): todo caminho de
-  capítulo (docs/context terminando em .md) citado entre crases OU como alvo de link
-  markdown vira ponteiro declarado e precisa existir — em prosa, não use nenhuma das formas.
-- O pre-commit roda `docs-check --staged`: valida o INDEX, não o disco. Teste o que vai
-  para o commit com `git add` antes; o lint de imutabilidade compara ADRs pelo NÚMERO
-  contra a merge-base (renomear não esconde edição; status não regride).
-- Capítulo RECONHECIDO declarado no Mapa de contexto (hoje só o `TESTS.md` em `docs/context/`)
-  dispara invariante de conteúdo: exige comando canônico. Registry fechado em
-  `RECOGNIZED_CHAPTERS`; estender = ADR no próprio repo (ADR-0008 / SPEC-0004).
-- Erro = `exit 1` por padrão. `--warn-only` sai 0 e existe só para a janela de adoção.
-- Os `README.md` de `docs/adr|specs/` são **gerados** por `--emit-index`; nunca editar à mão.
-  O check de frescor falha se o commitado divergir do gerado.
-- O script é executável sem extensão (`scripts/docs-check`); o CI o invoca via `python3`.
-- `install.sh`: o corpo vive em `main()`, chamada na ÚLTIMA linha — proteção contra
-  download truncado (SPEC-0002). Nunca adicione código depois dessa linha.
-- Script novo em `scripts/` precisa do bit de execução NO ÍNDICE do git:
-  `git update-index --chmod=+x scripts/<nome>`. No Windows `core.filemode=false` —
-  `chmod` do filesystem não chega ao índice, e o CI invoca sem `bash` (exit 126).
-- `scripts/build-site` e `site/` são exclusivos deste repo (nunca entram em `TOOLCHAIN` do
-  `casa-init`); links internos do HTML gerado devem ser relativos ao nível da página, pois
-  `/assets/…` quebra sob o subpath `/casa-standard/` do GitHub Pages (ADR-0018).
+- `docs-check` parses only a **restricted YAML subset** in frontmatter (scalar, inline list,
+  block list). Anything else is a deliberate ERROR, never ignored — see STANDARD §6.
+- `docs-check`, `docs-reserve`, and `casa-init` accept **both** canonical English structural
+  markers and legacy Portuguese markers from CASA 1.0–1.10 (ADR-0019). Never break PT-BR
+  backward compatibility; historical PT-BR ADRs (`0001`–`0018`) are immutable on disk.
+- Pointer resolution scans the ENTIRE router (outside HTML comments): any chapter path under
+  `docs/context` ending in `.md` written inside backticks OR as a Markdown link target becomes
+  a declared pointer and must exist on disk — never format example paths either way in prose.
+- `pre-commit` runs `docs-check --staged`: it validates the git INDEX, not the working tree.
+  Stage changes with `git add` before testing `--staged`; `--check-adr-immutability` compares
+  ADRs by derived NUMBER against the merge-base (renaming does not hide body edits).
+- Declaring a RECOGNIZED chapter in the Context map (today only `TESTS.md` under `docs/context/`)
+  activates a built-in content invariant requiring a canonical command (`RECOGNIZED_CHAPTERS`;
+  extending requires an ADR — ADR-0008 / SPEC-0004).
+- Errors exit `1` by default; `--warn-only` exits `0` and is strictly for adoption windows.
+- `docs/adr|specs/README.md` and `docs/index.json` are **generated** via `--emit-index`; never
+  hand-edit them. Freshness checks fail on drift.
+- `install.sh`: keep the entire body inside `main()`, invoked on the VERY LAST line — truncation
+  guard (SPEC-0002). Never append lines after `main "$@"`.
+- Every new executable in `scripts/` needs `+x` recorded in the git index:
+  `git update-index --chmod=+x scripts/<name>` (CI invokes scripts directly; exit 126 otherwise).
+- `scripts/build-site`, `scripts/test-site`, and `site/` (including `site/i18n/`) belong strictly
+  to this repo (never add to `TOOLCHAIN` in `casa-init`). Internal HTML links must stay relative
+  so GitHub Pages subpath `/casa-standard/` resolves both `/` (EN) and `/pt/` (PT-BR) cleanly.
+- `scripts/build-site` enforces structural i18n parity (SPEC-0012): changing section headings in
+  `STANDARD.md`, `## CASA X.Y` versions in `CHANGELOG.md`, `casa-*` skills, or adding `ADR-0019+` /
+  `SPEC-0012+` without updating `site/i18n/pt/` fails the build and CI (`scripts/test-site`).
 
-## Mapa de contexto
+## Context map
 
-<!-- Capítulos docs/context/ — ainda não há nenhum neste repo. -->
+<!-- docs/context/ chapters — none needed in this repo yet. -->
 
-| Capítulo | Quando carregar |
+| Chapter | When to load |
 |---|---|
-| (nenhum ainda) | — |
+| (none yet) | — |
 
-## Mapa de docs
+## Docs map
 
-- Padrão normativo: `STANDARD.md` · Templates: `docs/templates/`
-- Versões do contrato CASA: `CHANGELOG.md`
-- Decisões: `docs/adr/` · Comportamento: `docs/specs/` (READMEs GERADOS — não editar)
-- Pendências e reservas de NNNN: `docs/BACKLOG.md` — reserve com `scripts/docs-reserve adr|spec "título"` (ADR-0013)
-- Bootstrap/atualização de repo adotante: `scripts/casa-init <destino>` (SPEC-0001)
-- Skills do ciclo distribuídas ao adotante: `docs/templates/skills/casa-*` (ADR-0017, SPEC-0010)
-- Site público (GitHub Pages): `scripts/build-site` → `_site/` (ADR-0018, SPEC-0011)
-- Validar: `scripts/docs-check` · Regenerar índices: `scripts/docs-check --emit-index`
+- Normative spec: `STANDARD.md` · Templates: `docs/templates/` · Contract history: `CHANGELOG.md`
+- Decisions: `docs/adr/` · Behavior: `docs/specs/` (GENERATED READMEs — do not edit)
+- Pending items & `NNNN` ledger: `docs/BACKLOG.md` — reserve via `scripts/docs-reserve adr|spec "title"`
+- Adopter bootstrap/upgrade: `scripts/casa-init <target>` · Agent Skills: `docs/templates/skills/casa-*`
+- Bilingual public site (GitHub Pages): `scripts/build-site` → `_site/` (`/` EN + `/pt/` PT-BR; `site/i18n/`)
+- Validate: `scripts/docs-check` · Regenerate indices: `scripts/docs-check --emit-index`

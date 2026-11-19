@@ -1,32 +1,17 @@
 ---
 name: casa-propose
-description: Transforma uma necessidade em ADR ou Spec CASA pronta para revisão — decide pelo gatilho do STANDARD §3, reserva o número com scripts/docs-reserve, escreve casos de borda EARS e um DoD com comandos reais do repo. Use quando a tarefa envolve decisão estrutural, ou comportamento novo ou alterado com contrato observável.
+description: Turns a requirement into a review-ready CASA ADR or Spec — evaluates STANDARD §3 triggers, reserves the next number via scripts/docs-reserve, writes EARS edge cases, and defines an executable DoD with real repository commands. Use when a task introduces a structural decision or new/changed observable behavior.
 ---
 
-# CASA · propor
+# CASA · propose
 
-Etapas 1–3 do ciclo — §9 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada). Contexto ainda não mapeado? Rode
-`casa-explore` antes.
+Steps 1–3 of the delivery cycle — §9 of [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (pinned to the installed toolchain snapshot). Context not mapped yet? Run `casa-explore` first.
 
-1. **Gatilho (§3):** decisão estrutural → ADR. Contrato observável (API, fluxo de usuário,
-   casos de borda que importam) → Spec. Nenhum dos dois → não escreva documento.
-2. **Reserve e crie do template:** `python3 scripts/docs-reserve adr "título"` ou
-   `python3 scripts/docs-reserve spec "título"`. Nunca escolha o número à mão.
-3. **ADR** (`status: proposed`): contexto, direcionadores, opções com prós e contras, a
-   decisão em uma frase, consequências e `## Confirmação` com um comando que verifica a
-   decisão na prática (§5.1). Estado atual não entra no ADR — vai para capítulo de
-   contexto. ADR que substitui outro: no commit que o aceita, o antigo ganha `superseded`,
-   `superseded-by` e o bloco `VERDADE ATUAL` no topo (template do ADR).
-4. **Spec** (`status: draft`): ADRs que a fundamentam em `builds-on`; Fluxo, Contrato e
-   Casos de borda numerados, de preferência em EARS ("QUANDO gatilho, o sistema DEVE
-   resposta"). O que não dá para decidir vai para `## Questões em aberto` como `- [ ]` — e
-   bloqueia a implementação daquele ponto.
-5. **DoD (§7):** comandos REAIS do repo, com critério binário no comentário; todo caso de
-   borda coberto por uma linha ou por um teste que ela roda (`# casos 1–4`). DoD só com os
-   comandos genéricos do router é spec sem fechamento próprio.
-6. Rode `python3 scripts/docs-check --emit-index` e depois `python3 scripts/docs-check`
-   até verde. Pare aqui: aceitar (`proposed → accepted`, `draft → accepted`) é decisão
-   humana, no PR.
+1. **Trigger (§3):** structural decision → ADR. Observable contract (API, user flow, meaningful edge cases) → Spec. Neither → write no document.
+2. **Reserve and scaffold from template:** `python3 scripts/docs-reserve adr "title"` or `python3 scripts/docs-reserve spec "title"`. Never pick `NNNN` by hand.
+3. **ADR** (`status: proposed`): context, decision drivers, options with pros and cons, one-sentence decision, consequences, and `## Confirmation` with a practical command verifying compliance (§5.1). Current state never goes into an ADR — put it in a context chapter. When superseding an accepted ADR, in the commit that accepts the new ADR mark the old one `superseded`, set `superseded-by`, and add the top `CURRENT TRUTH` callout (max 3 lines).
+4. **Spec** (`status: draft`): cite foundational ADRs in `builds-on`; define Flow, Contract, and numbered Edge cases, preferably in EARS ("WHEN trigger, THE SYSTEM SHALL response"). Anything undecided goes under `## Open questions` as `- [ ]` — blocking implementation on that point.
+5. **DoD (§7):** REAL repository commands with a binary pass criterion in comments; every numbered edge case must be exercised by a DoD line or a test it runs (`# cases 1–4`). A DoD containing only generic router commands lacks spec-level closure.
+6. Run `python3 scripts/docs-check --emit-index` and `python3 scripts/docs-check` until green. Stop here: promoting `proposed → accepted` or `draft → accepted` is a human decision on the PR.
 
-Entrega grande demais para um fechamento só? Divida em specs ou mova parte para
-`## Fora do escopo` (casa-standard:ADR-0012).
+Delivery too large for a single atomic close? Split into separate specs or move deferred scope to `## Out of scope` (casa-standard:ADR-0012).

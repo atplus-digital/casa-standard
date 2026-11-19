@@ -1,47 +1,53 @@
-# Contribuindo com o casa-standard
+# Contributing to casa-standard
 
-Este repo é a **referência** do CASA Standard e segue o próprio padrão. A verdade técnica
-mora em `STANDARD.md`, nos ADRs/Specs e nos templates; este documento só descreve o **fluxo
-de contribuição** e aponta para as fontes canônicas — não redefine o padrão (Princípio 2:
-um fato mora num arquivo só).
+This repository is the **reference implementation** of the CASA Standard and dogfoods its own
+rules. Normative truth lives in `STANDARD.md`, `docs/adr/`, `docs/specs/`, and `docs/templates/`;
+this guide describes only the **contribution workflow** and points to canonical sources rather
+than duplicating them (Principle 2: one fact lives in one file).
 
-> Escala: este é um repo de referência mantido por poucas pessoas. O fluxo abaixo é
-> deliberadamente enxuto — issue como rastreio, PR com conversa (`STANDARD.md` §10). Sem
-> cerimônia de board/aprovação: rastreio de entrega vive na issue/PR/commit, nunca em
-> `docs/` (§3).
+> Scale: this reference repository is maintained by a small core team. The workflow below is
+> intentionally lean — GitHub issues track delivery, and pull requests host technical discussion
+> (`STANDARD.md` §10). Delivery tracking lives in issues, PRs, and commits, never inside `docs/`
+> (§3).
 
-## Fluxo
+## Workflow
 
-1. **Issue primeiro.** Descreva problema, escopo e fora-de-escopo. A issue é o rastreio da
-   entrega — o §3 delega rastreio ao tracker, não a documento CASA.
-2. **Branch** `<tipo>/<issue>-descricao`, com `<tipo>` ∈ {`feat`, `fix`, `docs`, `chore`,
-   `refactor`, `test`}. Ex.: `feat/8-registry-capacidades`.
-3. **Gatilhos da §3 decidem o que escrever:**
-   - Decisão estrutural → **ADR**: `scripts/docs-reserve adr "título"` reserva o `NNNN` e
-     cria o doc do template (ADR-0013; reserva manual em `docs/BACKLOG.md` continua válida).
-   - Comportamento com contrato → **Spec**: `scripts/docs-reserve spec "título"` (DoD
-     definido **antes** de implementar; §5.2).
-   - Nada disparou? Não escreve documento — só código + PR.
-   - Alterou o comportamento do `docs-check`? Atualize a **§8** do `STANDARD.md` no mesmo PR.
-4. **Implemente e feche o loop.** Rode o gate até verde (ver abaixo). Spec que conclui vira
-   `implemented` no mesmo commit (`implemented-by` real + `## Verificação`); regenere os
-   índices com `scripts/docs-check --emit-index`.
-5. **PR** com `Closes #NNN` (ou `Refs #NNN` para entrega parcial). O CI roda o `docs-check`.
-6. **Commits convencionais:** `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
+1. **Issue first.** Describe the problem, scope, and out-of-scope boundaries. Issues track
+   delivery — §3 delegates tracking to the issue tracker rather than CASA documents.
+2. **Branch** `<type>/<issue>-short-slug`, with `<type>` ∈ {`feat`, `fix`, `docs`, `chore`,
+   `refactor`, `test`}. Example: `feat/39-english-canonical-bilingual-site`.
+3. **Let §3 triggers decide what to write:**
+   - Structural decision → **ADR**: run `scripts/docs-reserve adr "title"` to reserve `NNNN` and
+     scaffold from template (ADR-0013; manual reservation in `docs/BACKLOG.md` remains valid).
+   - Observable behavior contract → **Spec**: run `scripts/docs-reserve spec "title"` (define
+     the executable DoD **before** implementing; §5.2).
+   - Neither trigger fired? Write no document — code + tests + PR only.
+   - Changed `docs-check` behavior? Update **§8** of `STANDARD.md` (and `site/i18n/pt/STANDARD.md`
+     for bilingual site parity) in the same PR.
+4. **Implement and close the loop.** Run every global DoD gate in `AGENTS.md` until green. Any
+   completed Spec transitions to `implemented` in the same commit (`implemented-by` with real
+   paths + `## Verification` evidence); regenerate indices via `scripts/docs-check --emit-index`.
+5. **Open a PR** referencing `Closes #NNN` (or `Refs #NNN` for partial work). CI enforces
+   `docs-check`.
+6. **Conventional commits:** `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
+7. **Language:** new canonical docs (`ADR-0019+`, `SPEC-0012+`), templates, and scripts are
+   authored in English (ADR-0019). Historical Portuguese ADRs (`ADR-0001`–`ADR-0018`) are
+   immutable on disk; site-layer translations live in `site/i18n/` and are verified by
+   `scripts/test-site`.
 
-## Gate técnico (Definition of Done)
+## Technical gate (Definition of Done)
 
-O DoD é executável e mora no router — não o duplico aqui. Rode o que o `AGENTS.md`
-(seção **"Como validar"**) manda; tudo precisa sair verde, e o CI cobra o mesmo `docs-check`.
+The executable DoD lives in `AGENTS.md` (**"How to validate (global repo DoD)"**) — not
+duplicated here. Every command listed there must exit 0 before merging.
 
-## Revisão
+## Review rules
 
-- Mudança normativa (`STANDARD.md`, comportamento do `docs-check`) pede revisão de outra
-  pessoa antes do merge.
-- **ADR aceito é imutável:** correção de corpo — inclusive typo/link — exige ADR novo que
-  supersede; só frontmatter e o bloco `VERDADE ATUAL` mudam (`STANDARD.md` §5.1/§8).
+- Normative changes (`STANDARD.md`, `docs-check` semantics) warrant peer review before merge.
+- **Accepted ADRs are immutable:** any body edit — including typos or links — requires a new ADR
+  that supersedes the old one; only frontmatter and the top `CURRENT TRUTH` / `VERDADE ATUAL`
+  callout may change (`STANDARD.md` §5.1/§8).
 
-## O que NÃO vira documento aqui
+## What does NOT become a document here
 
-Rastreio de entrega, épico e milestone vivem na issue/PR/commit. Plano é efêmero; ADR, Spec
-e capítulo de contexto são o que permanece em `docs/`.
+Epics, milestones, and delivery status belong in GitHub issues, PRs, and commits. Plans are
+ephemeral; ADRs, Specs, and context chapters are what endure in `docs/`.

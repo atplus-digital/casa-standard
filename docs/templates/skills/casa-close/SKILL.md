@@ -1,25 +1,18 @@
 ---
 name: casa-close
-description: Faz o fechamento atômico de uma Spec CASA num único commit — status implemented, implemented-by com paths reais, Verificação com a evidência do DoD, gotchas no router, estado atual no capítulo de contexto e índices regenerados. Use quando o DoD estiver verde e a entrega pronta para o PR final.
+description: Performs atomic closure of a CASA Spec in a single commit — status implemented, implemented-by with real paths, Verification populated with DoD evidence, gotchas added to the router, current state updated in context chapters, and indices regenerated. Use once the DoD is green and the delivery is ready for final PR review.
 ---
 
-# CASA · fechar
+# CASA · close
 
-Etapa 6 do ciclo — §9 e §5.2 do [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (na versão da toolchain instalada).
-Pré-requisito: DoD verde. O que o `casa-verify` apontar vai para a revisão humana do PR —
-ele não bloqueia nada.
+Step 6 of the delivery cycle — §9 and §5.2 of [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (pinned to the installed toolchain snapshot).
+Prerequisite: DoD green. Findings from `casa-verify` inform human PR review — they do not block on their own.
 
-Tudo no **mesmo commit**:
+Perform all steps in the **same commit**:
 
-1. **Spec:** `status: implemented`; `implemented-by` com os paths reais (código,
-   migrations, testes); `## Verificação` com data, comando e resultado de cada linha do DoD
-   — evidência, não "ok".
-2. **Gotchas** não-inferíveis → `## Gotchas` do `AGENTS.md`, curtos. O router tem teto de
-   ~150 linhas: estourou, o conteúdo desce para um capítulo e o router fica com o ponteiro.
-3. **Estado atual** que mudou → capítulo de `docs/context/` apontado pelo Mapa: imperativo,
-   atemporal, apontando para o ADR em vez de copiá-lo.
-4. `python3 scripts/docs-check --emit-index` e depois `python3 scripts/docs-check` → 0 erro.
+1. **Spec:** set `status: implemented`; populate `implemented-by` with real repository paths (code, migrations, tests); fill `## Verification` (`## Verificação`) with the date, exact command, and outcome of every DoD line — concrete evidence, never just "ok".
+2. **Gotchas** (non-inferable) → append concisely to `## Gotchas` in `AGENTS.md`. The router has a ~150-line cap: if exceeded, move detailed prose into a context chapter and leave a pointer in the router.
+3. **Current state** that changed → update the matching `docs/context/` chapter in the Context map: imperative, timeless, pointing to the ADR rather than copying its body.
+4. Run `python3 scripts/docs-check --emit-index` followed by `python3 scripts/docs-check` → 0 errors.
 
-Parte do escopo não ficou pronta? Não feche como `implemented`: com acordo humano, divida
-a Spec (a original vira `deprecated`) ou mova o resto para `## Fora do escopo` mais
-tracker/backlog (casa-standard:ADR-0012).
+Part of the scope left unfinished? Do not mark `implemented`: with human agreement, either split the Spec (marking the original `deprecated`) or move the deferred slice to `## Out of scope` plus the issue tracker or `docs/BACKLOG.md` (casa-standard:ADR-0012).
