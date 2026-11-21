@@ -10,7 +10,7 @@ Prerequisite: DoD green. Findings from `casa-verify` inform human PR review — 
 
 Perform all steps in the **same commit**:
 
-1. **Spec:** set `status: implemented`; populate `implemented-by` with real repository paths (code, migrations, tests); fill `## Verification` (`## Verificação`) with the date, exact command, and outcome of every DoD line — concrete evidence, never just "ok".
+1. **Spec:** set `status: implemented`; populate `implemented-by` with real repository paths (code, migrations, tests); fill `## Verification` (`## Verificação`) with the date, exact command, and observed outcome of every DoD line. Where the environment affects the claim, name the runtime exercised and carry any remaining coverage gap into the PR.
 2. **Gotchas** (non-inferable) → append concisely to `## Gotchas` in `AGENTS.md`. The router has a ~150-line cap: if exceeded, move detailed prose into a context chapter and leave a pointer in the router.
 3. **Current state** that changed → update the matching `docs/context/` chapter in the Context map: imperative, timeless, pointing to the ADR rather than copying its body.
 4. Run `python3 scripts/docs-check --emit-index` followed by `python3 scripts/docs-check` → 0 errors.

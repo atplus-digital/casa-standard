@@ -13,8 +13,8 @@ Step 4 of the delivery cycle — §9 of [STANDARD](https://github.com/atplus-dig
 4. Read the code and tests touched by the task.
 5. Return a concise brief:
    - active decisions constraining the task (`ADR-NNNN` + one line each);
-   - contracted behavior (`SPEC-NNNN`, status, and edge cases touched);
-   - §3 trigger assessment: structural decision → ADR; observable contract → Spec; neither → code only;
+   - the existing `SPEC-NNNN`, its status, and the case that covers the requested behavior, if any;
+   - the §3 decision in one line: identify the ADR to propose for a new structural decision, the Spec to propose or revise for an observable contract change, or why code and tests suffice under the current contract;
    - anything the repo leaves unanswered → ask the human. Never invent requirements.
 
-Unmade business decisions never become ADRs: record them in the issue tracker — or, in a trackerless repo, in `docs/BACKLOG.md` (§5.1).
+Revisit that decision if the scope expands, for example when a UI fix adds a new API operation. Unmade business decisions belong in the issue tracker or, in a trackerless repo, in `docs/BACKLOG.md` (§5.1).
