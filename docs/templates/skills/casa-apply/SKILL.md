@@ -7,7 +7,7 @@ description: Implements an accepted CASA Spec until its DoD is green while honor
 
 Steps 4–5 of the delivery cycle — §9 of [STANDARD](https://github.com/atplus-digital/casa-standard/blob/main/STANDARD.md) (pinned to the installed toolchain snapshot).
 
-1. **Check the Spec:** `status: accepted` and zero unchecked `- [ ]` items under `## Open questions`. If still `draft`, or if an open question touches your scope, stop and ask — agents never improvise over open questions (§5.2).
+1. **Check the Spec:** `status: accepted` and zero unchecked `- [ ]` items under `## Open questions`. If this task introduced or changed the contract, match the text you are about to implement to the revision the human accepted. Reuse that decision. Present any unreviewed change for acceptance before implementing the affected behavior. If the Spec is still `draft` or a question touches your scope, resolve it with the human (§5.2).
 2. Read every ADR listed in `builds-on` and honor each `## Confirmation` check.
 3. Implement edge case by edge case, writing or updating the test invoked by the corresponding DoD command.
 4. Run both the Spec's DoD and the router's global DoD until green. Never weaken or swap out a DoD command just to make it pass.
