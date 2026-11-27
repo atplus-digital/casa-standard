@@ -228,6 +228,19 @@
     "implemented-by": []
   },
   {
+    "id": "ADR-0020",
+    "path": "docs/adr/0020-router-byte-budget-feature-gotchas-in-chapters-and-proposals-that-trim-scope.md",
+    "layer": "adr",
+    "title": "Router byte budget, feature gotchas in chapters, and proposals that trim scope",
+    "status": "proposed",
+    "builds-on": [
+      "ADR-0012",
+      "ADR-0017"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
+  },
+  {
     "id": "SPEC-0001",
     "path": "docs/specs/0001-casa-init.md",
     "layer": "specs",
@@ -506,5 +519,17 @@
       ".github/workflows/docs-check.yml",
       ".github/workflows/pages.yml"
     ]
+  },
+  {
+    "id": "SPEC-0013",
+    "path": "docs/specs/0013-router-budget-and-unmapped-chapter-warnings-scope-and-evidence-prompts.md",
+    "layer": "specs",
+    "title": "docs-check flags an oversized router and unmapped chapters; templates and skills prompt for scope and evidence",
+    "status": "draft",
+    "builds-on": [
+      "ADR-0020"
+    ],
+    "superseded-by": null,
+    "implemented-by": []
   }
 ]

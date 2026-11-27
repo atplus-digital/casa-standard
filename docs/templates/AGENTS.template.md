@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: <repo-canonical-name>      # used in cross-repo references (repo:ADR-0001)
 casa-tier: T1                            # T0 (light) | T1 (standard) — STANDARD §3
-casa-version: 1.11                       # adopted CASA contract version (repo promise, ADR-0010)
+casa-version: 1.12                       # adopted CASA contract version (repo promise, ADR-0010)
 casa-standard-ref: <sha>                 # source casa-standard snapshot — stamped by casa-init
 ```
 
@@ -42,8 +42,9 @@ python3 scripts/docs-check   # exit 0 — CASA gate (STANDARD §8)
 <!-- Conventions; when to commit; whether a remote exists; whether agents open PRs unprompted. -->
 
 ## Gotchas
-<!-- NON-INFERABLE knowledge that already cost failed attempts. Every gotcha
-     discovered by an agent MUST be recorded here. -->
+<!-- CROSS-CUTTING, NON-INFERABLE knowledge that already cost failed attempts (toolchain,
+     environment, repo-wide rules). A gotcha scoped to one feature goes to that feature's
+     docs/context/ chapter, listed in the Context map below (ADR-0020). -->
 
 - 
 

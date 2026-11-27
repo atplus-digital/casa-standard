@@ -62,7 +62,7 @@ ROUTER_REQUIRED = {"casa-repo-id", "casa-tier", "casa-version", "casa-standard-r
 ROUTER_TIERS = {"T0", "T1"}
 # CASA contract version implemented by THIS toolchain (ADR-0010). Must match CASA_VERSION
 # in casa-init from the same snapshot — test-casa-init enforces synchronization.
-CONTRACT_VERSION = "1.11"
+CONTRACT_VERSION = "1.12"
 # RECOGNIZED context chapters (CLOSED registry — STANDARD §4/§8): declaring the pointer in
 # the router triggers a CONTENT invariant owned here by the validator. Triggered strictly by
 # DECLARATION in the router, never by physical presence on disk; adopters never bring custom
@@ -87,6 +87,9 @@ IMMUTABLE_NEXT = {"accepted": {"accepted", "deprecated", "superseded"},
                   "deprecated": {"deprecated", "superseded"},
                   "superseded": {"superseded"}}
 ROUTER_LINE_CAP = 150
+# Byte budget for the always-loaded router (ADR-0020): roughly 150 lines of ordinary prose.
+# A few very long lines used to slip under the line cap while costing many times the tokens.
+ROUTER_BYTE_CAP = 16_000
 ROUTER_DOD_HEADINGS = (
     "How to validate (global repo DoD)",
     "Como validar (DoD global do repo)",
@@ -268,6 +271,11 @@ def validate_router(root, errors, warnings):
     if n > ROUTER_LINE_CAP:
         warnings.append(f"AGENTS.md has {n} lines (~{ROUTER_LINE_CAP}-line cap) — "
                         "move detailed content to docs/context/")
+    size = len(text.encode("utf-8"))
+    if size > ROUTER_BYTE_CAP:
+        warnings.append(f"AGENTS.md has {size} bytes (~{ROUTER_BYTE_CAP}-byte budget) — move "
+                        "feature-scoped gotchas and detailed content to docs/context/ and "
+                        "keep a pointer in the Context map (ADR-0020)")
 
     visible = strip_comments(text)
     raw = first_yaml_block(visible)
@@ -338,6 +346,19 @@ def validate_router(root, errors, warnings):
             errors.append(f"AGENTS.md: Context map points to missing file '{ref_path}'")
         else:
             validate_recognized_chapter(root, ref_path, errors, warnings)
+
+    # Unmapped chapters (ADR-0020): a chapter the router never references is never loaded.
+    # README.md is an index, and a misplaced backlog already has its own warning (ADR-0011).
+    context_dir = root / "docs" / "context"
+    if context_dir.is_dir():
+        for chapter in sorted(context_dir.glob("*.md")):
+            if chapter.name.lower() in {"readme.md", "backlog.md"}:
+                continue
+            rel = chapter.relative_to(root).as_posix()
+            if rel not in pointers:
+                warnings.append(f"AGENTS.md: chapter '{rel}' is not referenced by the router — "
+                                "add it to the Context map with when to load it, or move it "
+                                "out of docs/context/ (ADR-0020)")
 
 
 def check_backlog_location(root, warnings):

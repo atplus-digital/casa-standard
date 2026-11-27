@@ -34,6 +34,7 @@ tables below and explicitly flags (never silently ignores) any unparseable line 
 | 0017 | Ciclo de entrega como Agent Skills: o agente executa o §9; verificação por agente é assistiva, nunca gate | 2026-11-18 | in use |
 | 0018 | Site público no GitHub Pages compilado das fontes canônicas sem segunda fonte de verdade | 2026-11-19 | in use |
 | 0019 | Adopt English as canonical product language with bilingual toolchain compatibility and bilingual site | 2026-11-19 | in use |
+| 0020 | Router byte budget, feature gotchas in chapters, and proposals that trim scope | 2026-11-27 | in use |
 
 ## Spec Reservations
 
@@ -51,3 +52,4 @@ tables below and explicitly flags (never silently ignores) any unparseable line 
 | 0010 | casa-init distribui as skills casa-* do ciclo de entrega | 2026-11-18 | in use |
 | 0011 | build-site gera o site estático do CASA Standard para o GitHub Pages | 2026-11-19 | in use |
 | 0012 | Bilingual CASA 1.11 toolchain compatibility and EN/PT-BR static site generation | 2026-11-19 | in use |
+| 0013 | Router budget and unmapped-chapter warnings; scope and evidence prompts | 2026-11-27 | in use |

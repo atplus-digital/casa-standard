@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scenarios for SPEC-0003, 0004, 0006, 0009, and 0012 (docs-check). DoD: exit 0 = all green.
+# Scenarios for SPEC-0003, 0004, 0006, 0009, 0012, and 0013 (docs-check). DoD: exit 0 = all green.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHECK="$ROOT/scripts/docs-check"
@@ -612,6 +612,47 @@ sed -i 's/2026-06-13.*/(preencher no fechamento)/' "$R/docs/specs/0001-pt.md"
 OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
 ck "SPEC-0012/2b: legacy PT-BR '(preencher no fechamento)' still fails when implemented" \
    '[ "$RC" -ne 0 ] && echo "$OUT" | grep -q "Verification still contains template placeholder"'
+
+# --- SPEC-0013: router byte budget and unmapped chapters (ADR-0020) ---
+# SPEC-0013/1 — a few very long lines: under the line cap, over the byte budget → warning, exit 0
+mkrepo
+{ printf '\n## Gotchas\n\n- '; head -c 17000 /dev/zero | tr '\0' 'x'; printf '\n'; } >> "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0013/1: router over the byte budget emits warning, exit 0" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*byte budget" && ! echo "$OUT" | grep -q "line cap"'
+
+# SPEC-0013/2 — router within both budgets → no size warning
+mkrepo
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0013/2: router within both budgets emits no size warning" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "byte budget" && ! echo "$OUT" | grep -q "line cap"'
+
+# SPEC-0013/3 — chapter the router never references → warning naming it, exit 0
+mkrepo
+mkdir -p "$R/docs/context"
+printf '# Infra\n\nRun X.\n' > "$R/docs/context/INFRA.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0013/3: unmapped chapter emits warning, exit 0" \
+   '[ "$RC" -eq 0 ] && echo "$OUT" | grep -q "WARNING.*docs/context/INFRA.md.*not referenced by the router"'
+
+# SPEC-0013/4 — referenced in backticks or as a link target → no warning
+mkrepo
+mkdir -p "$R/docs/context"
+printf '# Infra\n\nRun X.\n' > "$R/docs/context/INFRA.md"
+printf '# Security\n\nNever Y.\n' > "$R/docs/context/SECURITY.md"
+printf '| `docs/context/INFRA.md` | touching infra |\n| [security](docs/context/SECURITY.md) | touching auth |\n' >> "$R/AGENTS.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0013/4: chapters referenced by backticks or link emit no warning" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "not referenced by the router"'
+
+# SPEC-0013/5 — README.md and a misplaced backlog are not reported as unmapped chapters
+mkrepo
+mkdir -p "$R/docs/context"
+printf '# Index\n' > "$R/docs/context/README.md"
+printf '# Backlog\n' > "$R/docs/context/BACKLOG.md"
+OUT=$(python3 "$CHECK" --root "$R" 2>&1); RC=$?
+ck "SPEC-0013/5: README.md and backlog are not reported as unmapped chapters" \
+   '[ "$RC" -eq 0 ] && ! echo "$OUT" | grep -q "not referenced by the router" && echo "$OUT" | grep -q "move to docs/BACKLOG.md"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

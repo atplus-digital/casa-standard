@@ -37,7 +37,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent
 # Must match CONTRACT_VERSION in docs-check (ADR-0010) — test-casa-init guards sync.
-CASA_VERSION = "1.11"
+CASA_VERSION = "1.12"
 TOOLCHAIN = [
     "scripts/docs-check",
     "scripts/docs-reserve",

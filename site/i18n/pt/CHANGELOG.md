@@ -1,5 +1,21 @@
 # Changelog
 
+## CASA 1.12 — 2026-11-27
+
+- **O orçamento do router também é medido em bytes** (ADR-0020, SPEC-0013): o `docs-check` avisa
+  quando o `AGENTS.md` passa de ~16 KB, além do teto de ~150 linhas. Um router feito de poucas
+  linhas muito longas passava no teto de linhas custando várias vezes mais tokens.
+- **Gotcha de feature mora em capítulo:** no fechamento, os gotchas transversais vão para o router
+  e os de uma feature vão para o capítulo `docs/context/` correspondente (`casa-close`, §5.2, §9 e
+  o template do router).
+- **Capítulo fora do mapa é sinalizado:** o `docs-check` avisa sobre capítulo `docs/context/*.md`
+  que o router não referencia, porque nenhum agente o carregaria.
+- **A proposta nomeia o problema e a menor mudança:** o template de ADR e a `casa-propose` pedem o
+  problema observado e listam sempre a menor mudança entre as opções; o template de Spec ganha a
+  seção `## Out of scope` que o §5.2 já prescrevia; a `casa-propose` pede que afirmações sobre
+  código existente citem um caminho que o autor abriu. Só avisos e redação: evolução minor
+  compatível.
+
 ## CASA 1.11 — 2026-11-19
 
 - **Inglês como idioma canônico do produto; compatibilidade total com adotantes em português**

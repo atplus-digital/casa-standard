@@ -16,3 +16,4 @@
 | [SPEC-0010](0010-casa-init-distribui-as-skills-casa-do-ciclo-de-entrega.md) | casa-init distribui as skills casa-* do ciclo de entrega | implemented |
 | [SPEC-0011](0011-build-site-gera-o-site-estatico-do-casa-standard-para-o-github-pages.md) | build-site gera o site estático do CASA Standard para o GitHub Pages | implemented |
 | [SPEC-0012](0012-bilingual-casa-1-11-toolchain-compatibility-and-en-pt-br-static-site-generation.md) | Bilingual CASA 1.11 toolchain compatibility and EN/PT-BR static site generation | implemented |
+| [SPEC-0013](0013-router-budget-and-unmapped-chapter-warnings-scope-and-evidence-prompts.md) | docs-check flags an oversized router and unmapped chapters; templates and skills prompt for scope and evidence | draft |

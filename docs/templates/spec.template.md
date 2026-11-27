@@ -38,6 +38,13 @@ implemented-by: []          # real paths (code, migrations, functions) — fille
 |---|---|---|
 | 1 |  |  |
 
+## Out of scope
+<!-- Deferred or deliberately excluded work (ADR-0012, ADR-0020). Name each item, where it
+     is tracked (issue or docs/BACKLOG.md) and, when known, the signal that would justify
+     reopening it. Trimming scope here beats an umbrella spec that never closes. -->
+
+- 
+
 ## Open questions
 <!-- Every unchecked item BLOCKS that part of the implementation —
      the agent never improvises over an open question. -->
