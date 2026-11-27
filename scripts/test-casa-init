@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scenarios for SPEC-0001, 0009, 0010, and 0012 (casa-init). DoD: exit 0 = all green.
+# Scenarios for SPEC-0001, 0009, 0010, 0012, and 0013 (casa-init). DoD: exit 0 = all green.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INIT="$ROOT/scripts/casa-init"
@@ -295,6 +295,16 @@ ck "SPEC-0009/29: workflow uses single remote branch" 'grep -q "branches: \[deve
 # SPEC-0009/30 — merge queue also runs the gate against merge_group.base_sha
 ck "SPEC-0009/30: workflow triggers on merge_group" \
    'grep -q "^  merge_group:" "$D/.github/workflows/docs-check.yml" && grep -q "merge_group.base_sha" "$D/.github/workflows/docs-check.yml"'
+
+# --- SPEC-0013: scope and evidence prompts reach adopters (ADR-0020) ---
+ck "SPEC-0013/6: spec template carries Out of scope" \
+   'grep -q "^## Out of scope" "$SK/docs/templates/spec.template.md"'
+ck "SPEC-0013/6: ADR template asks for the smallest change" \
+   'grep -q "smallest change" "$SK/docs/templates/adr.template.md"'
+ck "SPEC-0013/7: casa-close routes feature gotchas to chapters" \
+   'grep -q "Feature-scoped ones" "$SK/.agents/skills/casa-close/SKILL.md" && grep -q "Feature-scoped ones" "$SK/.claude/skills/casa-close/SKILL.md"'
+ck "SPEC-0013/7: casa-propose asks for problem, smallest change and evidence" \
+   'grep -q "observed problem" "$SK/.agents/skills/casa-propose/SKILL.md" && grep -q "smallest change" "$SK/.agents/skills/casa-propose/SKILL.md" && grep -q "cites a path you opened" "$SK/.agents/skills/casa-propose/SKILL.md"'
 
 echo
 echo "==== $pass PASS / $fail FAIL ===="

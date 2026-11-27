@@ -22,3 +22,4 @@
 | [ADR-0017](0017-ciclo-de-entrega-como-agent-skills.md) | Ciclo de entrega como Agent Skills: o agente executa o §9; verificação por agente é assistiva, nunca gate | accepted |
 | [ADR-0018](0018-site-publico-no-github-pages-compilado-das-fontes-canonicas-sem-segunda-fonte-de-verdade.md) | Site público no GitHub Pages compilado das fontes canônicas sem segunda fonte de verdade | accepted |
 | [ADR-0019](0019-adopt-english-as-canonical-product-language-with-bilingual-toolchain-compatibility-and-bilingual-site.md) | Adopt English as canonical product language with bilingual toolchain compatibility and bilingual site | accepted |
+| [ADR-0020](0020-router-byte-budget-feature-gotchas-in-chapters-and-proposals-that-trim-scope.md) | Router byte budget, feature gotchas in chapters, and proposals that trim scope | proposed |

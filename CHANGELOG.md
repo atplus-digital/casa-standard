@@ -1,5 +1,21 @@
 # Changelog
 
+## CASA 1.12 — 2026-11-27
+
+- **The router budget is also measured in bytes** (ADR-0020, SPEC-0013): `docs-check` warns when
+  `AGENTS.md` exceeds ~16 KB, besides the ~150-line cap. A router made of a few very long lines
+  used to pass the line cap while costing many times the tokens.
+- **Feature-scoped gotchas live in chapters:** at close, cross-cutting gotchas go to the router and
+  feature-scoped ones go to the matching `docs/context/` chapter (`casa-close`, §5.2, §9 and the
+  router template).
+- **Unmapped chapters are flagged:** `docs-check` warns about a `docs/context/*.md` chapter that the
+  router never references, since no agent would ever load it.
+- **Proposals name the problem and the smallest change:** the ADR template and `casa-propose` ask for
+  the observed problem and always list the smallest change among the options; the Spec template
+  gains the `## Out of scope` section that §5.2 already prescribed; `casa-propose` asks that claims
+  about existing code cite a path the author opened. Warnings and wording only: backward-compatible
+  minor bump.
+
 ## CASA 1.11 — 2026-11-19
 
 - **English becomes the canonical product language; zero breaking changes for Portuguese adopters**

@@ -3,7 +3,7 @@
 ```yaml
 casa-repo-id: casa-standard
 casa-tier: T1
-casa-version: 1.11
+casa-version: 1.12
 casa-standard-ref: self
 ```
 
@@ -22,8 +22,8 @@ Python 3 reference toolchain (`scripts/*`, `install.sh`), and bilingual static s
 
 ```bash
 python3 scripts/docs-check          # exit 0; exact CI gate
-bash scripts/test-docs-check        # exit 0; validator scenarios (SPEC-0003..0009, 0012)
-scripts/test-casa-init              # exit 0; bootstrap scenarios (SPEC-0001, 0009, 0010)
+bash scripts/test-docs-check        # exit 0; validator scenarios (SPEC-0003..0009, 0012, 0013)
+scripts/test-casa-init              # exit 0; bootstrap scenarios (SPEC-0001, 0009, 0010, 0013)
 scripts/test-docs-reserve           # exit 0; reservation scenarios (SPEC-0007, 0012)
 scripts/test-update-check           # exit 0; update-check scenarios (SPEC-0008)
 scripts/test-install                # exit 0; curl|sh installer scenarios (SPEC-0002)

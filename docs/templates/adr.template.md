@@ -18,7 +18,8 @@ deciders: []
 # <decision title in active voice — becomes the derived title>
 
 ## Context and Problem
-<!-- What situation forces a decision? Why now?
+<!-- What situation forces a decision? Why now? Name the OBSERVED problem (incident, bug,
+     request). No observed problem yet → issue tracker or docs/BACKLOG.md, not an ADR.
      ⚠️ DECISION ≠ CURRENT STATE: this document records the dated decision.
      Resulting current state lives in docs/context/ and points back here. -->
 
@@ -26,6 +27,8 @@ deciders: []
 <!-- Forces at play: requirements, constraints, cost, timeline, risk. -->
 
 ## Considered Options
+<!-- Always list the smallest change that solves the observed problem (or doing nothing),
+     even when it is not the option chosen (ADR-0020). -->
 
 ### Option 1 — <name>
 **Pros:**
